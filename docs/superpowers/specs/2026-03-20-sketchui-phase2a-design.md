@@ -8,20 +8,27 @@ Add a visual manipulation layer to SketchUI that lets users freely move componen
 
 ### Three-Layer System
 
-Three transparent layers sit on top of the live page, inside the existing Shadow DOM host (`#sketch-ui-root`):
+Three transparent layers sit on top of the live page:
 
-1. **Ghost Layer** — Contains DOM clones of moved components. Each ghost is a `position: fixed` element with `pointer-events: none`. The original element is dimmed to `opacity: 0.3`. Ghosts are visually identical to the original (created via `el.cloneNode(true)`).
+1. **Ghost Layer** — Contains DOM clones of moved components. Ghosts are appended **directly to `document.body`** (not inside Shadow DOM) so they inherit page stylesheets. Each ghost is `position: fixed` with `pointer-events: none` and a high `z-index` (2147483644). The original element is dimmed to `opacity: 0.3`. Ghosts are created via `el.cloneNode(true)`.
 
-2. **Annotation Layer** — A full-viewport `<svg>` element (`position: fixed`, `top: 0`, `left: 0`, `100vw x 100vh`, `pointer-events: none`). Contains draw strokes, text labels, color change badges, and lasso paths. All annotations are children of a single `<g>` wrapper whose `transform` is updated on scroll: `translate(-scrollX, -scrollY)`. Ghost positions use the same scroll-offset pattern. All positions are stored in page coordinates (`pageX`/`pageY`).
+2. **Annotation Layer** — A full-viewport `<svg>` element inside the Shadow DOM (`position: fixed`, `top: 0`, `left: 0`, `100vw x 100vh`, `pointer-events: none`, `z-index: 2147483645`). Contains draw strokes, text labels, color change badges, and lasso paths. All annotations are children of a single `<g>` wrapper whose `transform` is updated on scroll: `translate(-scrollX, -scrollY)`. All positions are stored in page coordinates (`pageX`/`pageY`). Scroll listener uses `{ passive: true }` and updates are batched via `requestAnimationFrame`.
 
-3. **Interaction Layer** — A transparent full-viewport div that captures mouse/stylus events and dispatches them to the active tool. **Covers the page viewport area only — does not overlap the left sidebar.** The sidebar lives in Shadow DOM and handles its own events independently.
+3. **Interaction Layer** — A transparent full-viewport div (`z-index: 2147483646`, `pointer-events: auto` when a non-Pointer tool is active, `pointer-events: none` when Pointer is active) that captures mouse/stylus events and dispatches them to the active tool. **Covers the page viewport area only (left offset by 48px) — does not overlap the left sidebar.** The sidebar lives in Shadow DOM and handles its own events independently.
 
 ### Relationship to Phase 1
 
+Phase 1's `selection.ts` currently registers `mousedown`, `mousemove`, `mouseup`, and `keydown` listeners on `document` with `capture: true`, and calls `e.preventDefault()` + `e.stopPropagation()` in `handleMouseDown`. This creates an event routing conflict with the interaction layer.
+
+**`setEnabled(boolean)` behavior:**
+- `setEnabled(false)`: Removes all four capture-phase document listeners (`mousedown`, `mousemove`, `mouseup`, `keydown`). This fully yields event control to the interaction layer. Called when any non-Pointer tool becomes active.
+- `setEnabled(true)`: Re-attaches all four capture-phase listeners. The interaction layer sets `pointer-events: none` on itself, so events flow through to the document where `selection.ts` handles them. Called when Pointer tool becomes active.
+- This is different from `deactivateSelection()` (which is a permanent teardown for close). `setEnabled` is a reversible toggle.
+
+**Other Phase 1 integration:**
 - The bottom-right status toolbar remains for component info, undo reorder, eye toggle, generate button, and close.
 - Phase 1's selection overlays (hover highlight, selection box, selection label) remain and work in Pointer mode.
 - Phase 1's WebSocket bridge and bippy-based component resolution are reused by all tools.
-- `selection.ts` gains a `setEnabled(boolean)` export. When a non-Pointer tool is active, `setEnabled(false)` bypasses Phase 1's hover/selection/drag handlers. Pointer mode calls `setEnabled(true)`.
 - Phase 1's drag-to-reorder (Pointer + drag on selected element) still writes to source immediately. Move tool drag creates visual ghosts only. These are distinct behaviors tied to distinct tools.
 
 ## Tools Panel (Left Sidebar)
@@ -33,6 +40,7 @@ Three transparent layers sit on top of the live page, inside the existing Shadow
 - Icon buttons stacked vertically, 36x36px, with tooltip on hover
 - Active tool: highlight background `#3a3a4e` + 2px accent left border (`#64b5f6`)
 - Rendered inside the Shadow DOM host (`#sketch-ui-root`)
+- Bottom-right status toolbar position (`right: 16px`) is unaffected by the sidebar
 
 ### Tool Set
 
@@ -56,6 +64,7 @@ Three transparent layers sit on top of the live page, inside the existing Shadow
 ### Tool Switching
 
 - Click icon or press keyboard shortcut
+- **Tool keyboard shortcuts are suppressed when a text input is active (focused).** Only Enter and Escape are handled specially during text editing.
 - Switching tools cancels any in-progress operation (mid-draw stroke discarded, text input cancelled)
 - Pointer is the default tool on startup
 
@@ -64,6 +73,8 @@ Three transparent layers sit on top of the live page, inside the existing Shadow
 ### Pointer (V)
 
 Identical to Phase 1 select mode. Hover highlights, click selects component (async bippy resolution), Escape deselects. Drag on selected element triggers Phase 1 reorder (source write). No changes from Phase 1.
+
+When Pointer is active: interaction layer has `pointer-events: none`, `selection.ts` listeners are re-attached via `setEnabled(true)`.
 
 ### Grab (H)
 
@@ -75,7 +86,7 @@ Identical to Phase 1 select mode. Hover highlights, click selects component (asy
 ### Move (M)
 
 - Requires a selected component. If nothing is selected, the tool temporarily acts as Pointer: user clicks to select, then the tool **automatically reverts to Move behavior** — no extra keypress needed.
-- **Drag start**: Clone selected element via `el.cloneNode(true)`, add clone to Shadow DOM as ghost (`position: fixed`), dim original to `opacity: 0.3` (or `opacity: 0` / `display: none` if eye toggle is off).
+- **Drag start**: Clone selected element via `el.cloneNode(true)`, append to `document.body` as ghost (`position: fixed`, high z-index), dim original to `opacity: 0.3` (or `visibility: hidden` if eye toggle is off).
 - **Drag move**: Update ghost `left`/`top` to follow cursor.
 - **Drag end**: Ghost stays at final position, pushed to canvas state.
 - Dragging an existing ghost updates its position (no new ghost created).
@@ -84,7 +95,7 @@ Identical to Phase 1 select mode. Hover highlights, click selects component (asy
 ### Draw (D)
 
 - Mousedown starts a new SVG `<path>` in the annotation layer, mousemove appends points, mouseup finalizes.
-- Raw points simplified with Ramer-Douglas-Peucker algorithm to reduce count.
+- Raw points simplified with Ramer-Douglas-Peucker algorithm (epsilon ~2px) to reduce count.
 - Rendered as `<path>` with `stroke-linecap: round`, `stroke-linejoin: round`.
 - Each stroke wrapped in a `<g>` group with a data attribute linking to its annotation ID.
 - `targetComponent` resolved from the element under the **start point** of the stroke (not midpoint or endpoint). If no component under start point, `targetComponent` is `null`.
@@ -93,10 +104,12 @@ Identical to Phase 1 select mode. Hover highlights, click selects component (asy
 
 ### Color (C)
 
-- Click an element → resolve component via bippy → show inline color picker popover near click point.
-- Picker shows the element's current `color` or `backgroundColor` (user picks which property).
+- Click an element → resolve component via bippy → show a native `<input type="color">` picker positioned near the click point (rendered inside Shadow DOM, absolutely positioned).
+- A small popover wrapper shows two radio buttons for the target property: `color` or `backgroundColor`. Default is `backgroundColor`.
+- Picker's initial value is the element's current computed value for the chosen property.
 - On color select: apply as inline style override on the real DOM element (visual only, reversed on reset). Record as `ColorOverride` annotation.
 - Clicking same element again reopens picker with the overridden color.
+- Picker dismissed by: selecting a color (auto-close), clicking outside, or pressing Escape.
 - Cursor: `pointer`
 
 ### Text (T)
@@ -113,10 +126,22 @@ Identical to Phase 1 select mode. Hover highlights, click selects component (asy
 - Mousedown starts a freehand SVG path, mouseup closes it.
 - All components whose bounding rects intersect the closed path become selected (multi-select).
 - Multi-selection shown with blue borders on all matched elements.
-- **Transient** — no annotation created. This is a selection tool. User can then Move all selected at once, or apply Color to all.
+- **Transient** — no annotation created. This is a selection tool only.
+- After lasso selection, the user can switch to another tool (Move, Color) to act on the selection. Multi-select behavior for Move and Color is deferred to implementation — Phase 2A delivers lasso as a multi-select mechanism; batch operations on multi-selections are out of scope for this spec and will be designed if needed during implementation.
 - Cursor: `crosshair`
 
 ## Canvas State (`canvas-state.ts`)
+
+### Shared Type Alias
+
+```typescript
+/** Reference to a resolved component — used across all annotation types */
+interface ComponentRef {
+  componentName: string;
+  filePath: string;
+  lineNumber: number;
+}
+```
 
 ### Data Model
 
@@ -124,8 +149,9 @@ Identical to Phase 1 select mode. Hover highlights, click selects component (asy
 type ToolType = "pointer" | "grab" | "move" | "draw" | "color" | "text" | "lasso";
 
 interface Ghost {
-  id: string;                    // "filePath:lineNumber"
+  id: string;                    // unique ID via crypto.randomUUID()
   componentInfo: ComponentInfo;
+  componentRef: ComponentRef;    // for serialization (filePath:lineNumber:componentName)
   originalRect: DOMRect;
   currentPos: { x: number; y: number };
   cloneEl: HTMLElement;
@@ -138,7 +164,7 @@ interface DrawAnnotation {
   points: Array<{ x: number; y: number }>;
   color: string;
   strokeWidth: number;
-  targetComponent: { componentName: string; filePath: string; lineNumber: number } | null;
+  targetComponent: ComponentRef | null;
 }
 
 interface TextAnnotation {
@@ -148,13 +174,13 @@ interface TextAnnotation {
   content: string;
   fontSize: number;
   color: string;
-  targetComponent: { componentName: string; filePath: string; lineNumber: number } | null;
+  targetComponent: ComponentRef | null;
 }
 
 interface ColorOverride {
   type: "colorChange";
   id: string;
-  component: { componentName: string; filePath: string; lineNumber: number };
+  component: ComponentRef;
   targetElement: HTMLElement;
   property: "color" | "backgroundColor";
   fromColor: string;
@@ -185,21 +211,34 @@ interface CanvasState {
 - Shows a brief toast: "Undo: draw stroke removed", "Undo: move reverted", etc.
 - Phase 1's toolbar button labeled **"Undo Reorder"** (not just "Undo") for clarity
 
+**Undo action types:**
+
+```typescript
+type CanvasUndoAction =
+  | { type: "ghostCreate"; ghostId: string }
+  | { type: "ghostMove"; ghostId: string; previousPos: { x: number; y: number } }
+  | { type: "annotationAdd"; annotationId: string }
+  | { type: "colorChange"; annotationId: string; element: HTMLElement; property: string; previousColor: string };
+```
+
 ### Reset
 
-- "Clear All" button at bottom of left sidebar (or Ctrl+Shift+Z)
-- Removes all ghosts, annotations, color overrides
-- Restores original element opacity
+- "Clear All" button at bottom of left sidebar
+- No keyboard shortcut (avoids conflicting with Ctrl+Shift+Z Redo convention)
+- Removes all ghosts (from `document.body`), annotations, color overrides
+- Restores original element opacity and visibility
 - Clears the canvas undo stack
 
 ## Eye Toggle
 
 - Button in the bottom-right status toolbar, between Generate and Undo Reorder
 - Default state: eye-open icon (originals visible at 0.3 opacity)
-- Toggle (click or `.` key): sets all dimmed originals to `opacity: 0` + `display: none` so layout collapses — user sees only ghost clones in proposed positions
-- Toggle back: restores originals to `opacity: 0.3`
+- Toggle (click or `.` key): sets all originals **that have a corresponding ghost** to `visibility: hidden` (preserves layout space, hides visually). User sees only ghost clones in proposed positions.
+- Toggle back: restores those originals to `opacity: 0.3`, `visibility: visible`
 - Icon switches between open eye and crossed-out eye SVG
 - State stored in `canvas-state.ts` as `originalsHidden: boolean`
+
+Note: `visibility: hidden` is used instead of `display: none` to prevent layout collapse, which would shift other elements and make ghost positions meaningless relative to the new layout.
 
 ## Generate Button
 
@@ -258,7 +297,7 @@ interface CanvasState {
 ### SVG Structure
 
 ```svg
-<svg style="position:fixed; top:0; left:0; width:100vw; height:100vh; pointer-events:none;">
+<svg style="position:fixed; top:0; left:0; width:100vw; height:100vh; pointer-events:none; z-index:2147483645;">
   <g class="annotation-root" transform="translate(-scrollX, -scrollY)">
     <!-- draw strokes -->
     <g data-annotation-id="draw-1">
@@ -281,8 +320,8 @@ interface CanvasState {
 
 - Single `<g class="annotation-root">` wraps all annotation elements
 - On scroll: update `transform: translate(-scrollX, -scrollY)` on this `<g>`
-- Ghost clones use the same offset pattern (adjust `left`/`top` by scroll delta)
-- One transform update per scroll frame — no per-element recalculation
+- Ghost clones (on `document.body`) use the same offset pattern (adjust `left`/`top` by scroll delta, batched via `requestAnimationFrame`)
+- Scroll listener uses `{ passive: true }` — one transform update per animation frame, no per-element recalculation
 
 ### Draw Stroke Simplification
 
@@ -316,11 +355,11 @@ packages/overlay/src/
 
 ```
 packages/overlay/src/
-  selection.ts        — Add setEnabled(boolean) export to enable/disable Phase 1 handlers
+  selection.ts        — Add setEnabled(boolean) export: removes/re-attaches capture-phase listeners
   toolbar.ts          — Rename Undo → "Undo Reorder", add Eye toggle + Generate button
   index.ts            — Wire up new subsystems (tools panel, canvas state, layers)
 packages/shared/src/
-  types.ts            — Add annotation types, ToolType, serialization format types
+  types.ts            — Add ComponentRef, annotation types, ToolType, CanvasUndoAction, serialization format types
 ```
 
 ## Out of Scope (Phase 2A)
@@ -329,7 +368,8 @@ packages/shared/src/
 - Screenshot capture (Phase 2B)
 - Diff preview UI (Phase 2B)
 - Applying AI-generated changes to filesystem (Phase 2B)
-- Redo (Ctrl+Shift+Z is Reset, not Redo)
+- Redo (no Redo implementation in Phase 2A)
+- Batch operations on lasso multi-selections (Move all, Color all)
 - Multi-user / collaborative editing
 - Saving/loading canvas state to disk
 - Stylus pressure sensitivity
