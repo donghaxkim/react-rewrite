@@ -2,6 +2,7 @@
 import { connect, disconnect } from "./bridge.js";
 import { mountToolbar, destroyToolbar, setOnEyeToggle, setOnGenerate, setOnCanvasUndo, updateEyeButton, updateGenerateButton, showToast } from "./toolbar.js";
 import { initSelection, deactivateSelection } from "./selection.js";
+import { initHighlightCanvas, destroyHighlightCanvas } from "./highlight-canvas.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
 import { initGhostLayer, destroyGhostLayer } from "./ghost-layer.js";
@@ -42,6 +43,7 @@ function init(): void {
 
   // Phase 1 systems
   initSelection();
+  initHighlightCanvas();
   initDrag();
 
   // Phase 2A layers
@@ -128,6 +130,7 @@ function init(): void {
 
 function close(): void {
   deactivateSelection();
+  destroyHighlightCanvas();
   deactivateDrag();
   destroyAnnotationLayer();
   destroyGhostLayer();

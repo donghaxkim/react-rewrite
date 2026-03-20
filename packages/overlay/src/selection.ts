@@ -5,6 +5,7 @@ import type { ComponentInfo } from "@sketch-ui/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
+import { setHoverTarget, setSelectionTarget } from "./highlight-canvas.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -131,8 +132,6 @@ let isActive = false;
 let listenersAttached = false;
 
 // Overlay elements
-let hoverOverlay: HTMLDivElement | null = null;
-let selectionOverlay: HTMLDivElement | null = null;
 let selectionLabel: HTMLDivElement | null = null;
 let marqueeBox: HTMLDivElement | null = null;
 
@@ -148,22 +147,6 @@ let onDragMoveCallback: ((e: MouseEvent) => void) | null = null;
 let onDragEndCallback: ((e: MouseEvent) => void) | null = null;
 
 const OVERLAY_STYLES = `
-  .hover-overlay {
-    position: fixed;
-    pointer-events: none;
-    border: 1.5px solid ${COLORS.accent};
-    background: ${COLORS.accentSoft};
-    z-index: 2147483646;
-    display: none;
-  }
-  .selection-overlay {
-    position: fixed;
-    pointer-events: none;
-    border: 1.5px solid ${COLORS.accent};
-    background: ${COLORS.accentMedium};
-    z-index: 2147483646;
-    display: none;
-  }
   .selection-label {
     position: fixed;
     pointer-events: none;
@@ -216,17 +199,6 @@ const OVERLAY_STYLES = `
   }
 `;
 
-function getMatchedBorderRadius(el: HTMLElement): string {
-  const computed = getComputedStyle(el).borderRadius;
-  if (!computed || computed === "0px") return "4px";
-  const parts = computed.split(" ");
-  if (parts.length === 1) {
-    const px = parseFloat(parts[0]);
-    return isNaN(px) ? "4px" : `${px + 2}px`;
-  }
-  return "4px";
-}
-
 export function setDragCallbacks(callbacks: {
   onStart: (e: MouseEvent, el: HTMLElement, selection: ComponentInfo) => void;
   onMove: (e: MouseEvent) => void;
@@ -244,14 +216,6 @@ export function initSelection(): void {
   const style = document.createElement("style");
   style.textContent = OVERLAY_STYLES;
   shadowRoot.appendChild(style);
-
-  hoverOverlay = document.createElement("div");
-  hoverOverlay.className = "hover-overlay";
-  shadowRoot.appendChild(hoverOverlay);
-
-  selectionOverlay = document.createElement("div");
-  selectionOverlay.className = "selection-overlay";
-  shadowRoot.appendChild(selectionOverlay);
 
   selectionLabel = document.createElement("div");
   selectionLabel.className = "selection-label";
@@ -338,19 +302,12 @@ function handleMouseMove(e: MouseEvent): void {
   if (mode === "idle") {
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
     if (!el || !isValidElement(el)) {
-      hideHoverOverlay();
+      setHoverTarget(null);
       return;
     }
-
     const rect = el.getBoundingClientRect();
-    if (hoverOverlay) {
-      hoverOverlay.style.display = "block";
-      hoverOverlay.style.left = `${rect.left}px`;
-      hoverOverlay.style.top = `${rect.top}px`;
-      hoverOverlay.style.width = `${rect.width}px`;
-      hoverOverlay.style.height = `${rect.height}px`;
-      hoverOverlay.style.borderRadius = getMatchedBorderRadius(el);
-    }
+    const br = parseFloat(getComputedStyle(el).borderRadius) || 4;
+    setHoverTarget(rect, br + 2);
   }
 }
 
@@ -550,14 +507,10 @@ function handleKeyDown(e: KeyboardEvent): void {
   }
 }
 
-function showSelectionOverlay(rect: DOMRect, info: any): void {
-  if (selectionOverlay && selectedElement) {
-    selectionOverlay.style.display = "block";
-    selectionOverlay.style.left = `${rect.left}px`;
-    selectionOverlay.style.top = `${rect.top}px`;
-    selectionOverlay.style.width = `${rect.width}px`;
-    selectionOverlay.style.height = `${rect.height}px`;
-    selectionOverlay.style.borderRadius = getMatchedBorderRadius(selectedElement);
+function showSelectionOverlay(rect: DOMRect, _info: any): void {
+  if (selectedElement) {
+    const br = parseFloat(getComputedStyle(selectedElement).borderRadius) || 4;
+    setSelectionTarget(rect, br + 2);
   }
 
   if (selectionLabel) {
@@ -590,13 +543,13 @@ function showSelectionOverlay(rect: DOMRect, info: any): void {
 }
 
 function hideHoverOverlay(): void {
-  if (hoverOverlay) hoverOverlay.style.display = "none";
+  setHoverTarget(null);
 }
 
 export function clearSelection(): void {
   currentSelection = null;
   selectedElement = null;
-  if (selectionOverlay) selectionOverlay.style.display = "none";
+  setSelectionTarget(null);
   if (selectionLabel) {
     selectionLabel.classList.remove("visible");
     selectionLabel.style.display = "none";
