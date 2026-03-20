@@ -2,8 +2,9 @@
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";
-import { updateComponentInfo, getShadowRoot } from "./toolbar.js";
+import { getShadowRoot } from "./toolbar.js";
 import { isInternalName } from "./utils/component-filter.js";
+import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -150,42 +151,82 @@ const OVERLAY_STYLES = `
   .hover-overlay {
     position: fixed;
     pointer-events: none;
-    border: 2px solid #42a5f5;
-    background: rgba(66, 165, 245, 0.08);
+    border: 1.5px solid ${COLORS.accent};
+    background: ${COLORS.accentSoft};
     z-index: 2147483646;
-    transition: all 0.05s ease-out;
+    transition: all ${TRANSITIONS.fast};
     display: none;
   }
   .selection-overlay {
     position: fixed;
     pointer-events: none;
-    border: 2px solid #1e88e5;
-    background: rgba(30, 136, 229, 0.05);
+    border: 1.5px solid ${COLORS.accent};
+    background: ${COLORS.accentMedium};
     z-index: 2147483646;
     display: none;
   }
   .selection-label {
     position: fixed;
     pointer-events: none;
-    background: #1e88e5;
-    color: white;
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 3px;
+    background: ${COLORS.bgPrimary};
+    border: 1px solid ${COLORS.border};
+    box-shadow: ${SHADOWS.sm};
+    border-radius: ${RADII.sm};
+    padding: 4px 8px;
     z-index: 2147483646;
-    font-family: -apple-system, BlinkMacSystemFont, monospace;
+    font-family: ${FONT_FAMILY};
     white-space: nowrap;
     display: none;
+    opacity: 0;
+    transition: opacity ${TRANSITIONS.medium};
   }
+  .selection-label.visible {
+    opacity: 1;
+  }
+  .selection-label .comp-name {
+    color: ${COLORS.textPrimary};
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .selection-label .comp-path {
+    color: ${COLORS.textSecondary};
+    font-size: 11px;
+    margin-left: 8px;
+  }
+  .selection-label .loading-dots {
+    color: ${COLORS.textTertiary};
+    font-size: 12px;
+  }
+  @keyframes dotPulse {
+    0%, 80%, 100% { opacity: 0.2; }
+    40% { opacity: 1; }
+  }
+  .selection-label .loading-dots span {
+    animation: dotPulse 1.4s infinite;
+  }
+  .selection-label .loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .selection-label .loading-dots span:nth-child(3) { animation-delay: 0.4s; }
   .marquee-box {
     position: fixed;
-    border: 1px dashed #42a5f5;
-    background: rgba(66, 165, 245, 0.1);
+    border: 1px solid ${COLORS.accent};
+    background: ${COLORS.accentSoft};
+    border-radius: 2px;
     z-index: 2147483646;
     display: none;
     pointer-events: none;
   }
 `;
+
+function getMatchedBorderRadius(el: HTMLElement): string {
+  const computed = getComputedStyle(el).borderRadius;
+  if (!computed || computed === "0px") return "4px";
+  const parts = computed.split(" ");
+  if (parts.length === 1) {
+    const px = parseFloat(parts[0]);
+    return isNaN(px) ? "4px" : `${px + 2}px`;
+  }
+  return "4px";
+}
 
 export function setDragCallbacks(callbacks: {
   onStart: (e: MouseEvent, el: HTMLElement, selection: ComponentInfo) => void;
@@ -300,6 +341,7 @@ function handleMouseMove(e: MouseEvent): void {
       hoverOverlay.style.top = `${rect.top}px`;
       hoverOverlay.style.width = `${rect.width}px`;
       hoverOverlay.style.height = `${rect.height}px`;
+      hoverOverlay.style.borderRadius = getMatchedBorderRadius(el);
     }
   }
 }
@@ -340,11 +382,15 @@ function handleMouseUp(e: MouseEvent): void {
 
 async function selectElement(el: HTMLElement): Promise<void> {
   try {
+    // Show selection overlay with loading dots immediately, before async resolve
+    selectedElement = el;
+    showSelectionOverlay(el.getBoundingClientRect(), {} as any);
+    hideHoverOverlay();
+
     const resolved = await resolveComponentFromElement(el);
     console.log("[SketchUI] selectElement:", el.tagName, "→", resolved?.componentName, resolved?.filePath, "stack:", resolved?.stack?.map(s => s.componentName));
     if (!resolved) return;
 
-    selectedElement = el;
     currentSelection = {
       tagName: resolved.tagName,
       componentName: resolved.componentName,
@@ -360,17 +406,10 @@ async function selectElement(el: HTMLElement): Promise<void> {
       },
     };
 
-    showSelectionOverlay(el.getBoundingClientRect(), currentSelection);
-    hideHoverOverlay();
-
-    // Show element + component: "<a> in <Navbar /> — src/components/Navbar.tsx:7"
-    const tagPart = `<${resolved.tagName}>`;
-    const compPart = `<${resolved.componentName} />`;
-    const locPart = resolved.filePath ? ` — ${resolved.filePath}:${resolved.lineNumber}` : "";
-    const display = resolved.tagName === resolved.componentName.toLowerCase()
-      ? `${compPart}${locPart}`
-      : `${tagPart} in ${compPart}${locPart}`;
-    updateComponentInfo(display);
+    if (selectionLabel) {
+      const pathText = resolved.filePath ? `${resolved.filePath}:${resolved.lineNumber}` : "";
+      selectionLabel.innerHTML = `<span class="comp-name">${resolved.componentName}</span>${pathText ? `<span class="comp-path">${pathText}</span>` : ""}`;
+    }
   } catch (err) {
     console.error("[SketchUI] selectElement error:", err);
   }
@@ -383,7 +422,7 @@ function performMarqueeSelect(
   y2: number
 ): void {
   const elements: HTMLElement[] = [];
-  const allElements = document.querySelectorAll("*");
+  const allElements = Array.from(document.querySelectorAll("*"));
 
   for (const el of allElements) {
     if (el.closest("#sketch-ui-root")) continue;
@@ -440,9 +479,11 @@ function performMarqueeSelect(
       };
 
       showSelectionOverlay(rect, currentSelection);
-      updateComponentInfo(
-        `<${lca.componentName} /> — ${lca.filePath}:${lca.lineNumber}`
-      );
+
+      if (selectionLabel) {
+        const pathText = lca.filePath ? `${lca.filePath}:${lca.lineNumber}` : "";
+        selectionLabel.innerHTML = `<span class="comp-name">${lca.componentName}</span>${pathText ? `<span class="comp-path">${pathText}</span>` : ""}`;
+      }
       return;
     }
   }
@@ -485,20 +526,42 @@ function handleKeyDown(e: KeyboardEvent): void {
   }
 }
 
-function showSelectionOverlay(rect: DOMRect, info: ComponentInfo): void {
-  if (selectionOverlay) {
+function showSelectionOverlay(rect: DOMRect, info: any): void {
+  if (selectionOverlay && selectedElement) {
     selectionOverlay.style.display = "block";
     selectionOverlay.style.left = `${rect.left}px`;
     selectionOverlay.style.top = `${rect.top}px`;
     selectionOverlay.style.width = `${rect.width}px`;
     selectionOverlay.style.height = `${rect.height}px`;
+    selectionOverlay.style.borderRadius = getMatchedBorderRadius(selectedElement);
   }
 
   if (selectionLabel) {
+    const labelHeight = 28;
+    const gap = 8;
+    let top = rect.top - labelHeight - gap;
+    let left = rect.left;
+
+    if (top < 0) {
+      top = rect.bottom + gap;
+    }
+
+    selectionLabel.style.left = `${left}px`;
+    selectionLabel.style.top = `${top}px`;
     selectionLabel.style.display = "block";
-    selectionLabel.style.left = `${rect.left}px`;
-    selectionLabel.style.top = `${rect.top - 20}px`;
-    selectionLabel.textContent = `<${info.componentName} />`;
+    selectionLabel.style.right = "auto";
+
+    selectionLabel.innerHTML = `<span class="loading-dots"><span>.</span><span>.</span><span>.</span></span>`;
+    requestAnimationFrame(() => selectionLabel?.classList.add("visible"));
+
+    requestAnimationFrame(() => {
+      if (!selectionLabel) return;
+      const labelRect = selectionLabel.getBoundingClientRect();
+      if (labelRect.right > window.innerWidth - 8) {
+        selectionLabel.style.left = "auto";
+        selectionLabel.style.right = "8px";
+      }
+    });
   }
 }
 
@@ -510,8 +573,10 @@ export function clearSelection(): void {
   currentSelection = null;
   selectedElement = null;
   if (selectionOverlay) selectionOverlay.style.display = "none";
-  if (selectionLabel) selectionLabel.style.display = "none";
-  updateComponentInfo("No selection");
+  if (selectionLabel) {
+    selectionLabel.classList.remove("visible");
+    selectionLabel.style.display = "none";
+  }
 }
 
 export function getSelection(): ComponentInfo | null {
@@ -525,6 +590,8 @@ export function deactivateSelection(): void {
   document.removeEventListener("mouseup", handleMouseUp, true);
   document.removeEventListener("keydown", handleKeyDown, true);
   listenersAttached = false;
+  selectionLabel?.remove();
+  selectionLabel = null;
 }
 
 /**
