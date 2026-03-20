@@ -1,6 +1,7 @@
 // packages/overlay/src/interaction.ts
 import { getActiveTool, getToolOptions } from "./canvas-state.js";
 import { moveCursorSvg, drawCursorSvg, colorCursorSvg, lassoCursorSvg } from "./design-tokens.js";
+import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
 
 export type ToolEventHandler = {
   onMouseDown?: (e: MouseEvent) => void | Promise<void>;
@@ -30,6 +31,8 @@ export function initInteraction(): void {
   `;
 
   document.body.appendChild(interactionEl);
+
+  document.addEventListener("scroll", clearElementCache, true);
 
   interactionEl.addEventListener("mousedown", (e) => {
     activeHandler?.onMouseDown?.(e);
@@ -75,7 +78,34 @@ export function setInteractionCursor(cursor: string): void {
   if (interactionEl) interactionEl.style.cursor = cursor;
 }
 
+/**
+ * Find the actual page element at a viewport point, looking through all SketchUI layers.
+ * Uses elementsFromPoint to skip the interaction layer, shadow DOM host, and ghost elements.
+ */
+export function getPageElementAtPoint(clientX: number, clientY: number): HTMLElement | null {
+  // Check cache first — avoids expensive elementsFromPoint on small mouse movements
+  const cached = getCachedElement(clientX, clientY);
+  if (cached !== undefined) return cached;
+
+  const elements = document.elementsFromPoint(clientX, clientY);
+  let result: HTMLElement | null = null;
+
+  for (const el of elements) {
+    if (!(el instanceof HTMLElement)) continue;
+    if (el.closest("#sketch-ui-root")) continue;
+    if (el.hasAttribute("data-sketch-ui-interaction")) continue;
+    if (el.hasAttribute("data-sketch-ui-ghost")) continue;
+    if (el === document.body || el === document.documentElement) continue;
+    result = el;
+    break;
+  }
+
+  setCachedElement(clientX, clientY, result);
+  return result;
+}
+
 export function destroyInteraction(): void {
+  document.removeEventListener("scroll", clearElementCache, true);
   interactionEl?.remove();
   interactionEl = null;
   activeHandler = null;
