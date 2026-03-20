@@ -10,11 +10,11 @@ Add a visual manipulation layer to SketchUI that lets users freely move componen
 
 Three transparent layers sit on top of the live page:
 
-1. **Ghost Layer** — Contains DOM clones of moved components. Ghosts are appended **directly to `document.body`** (not inside Shadow DOM) so they inherit page stylesheets. Each ghost is `position: fixed` with `pointer-events: none` and a high `z-index` (2147483644). The original element is dimmed to `opacity: 0.3`. Ghosts are created via `el.cloneNode(true)`.
+1. **Ghost Layer** — Contains DOM clones of moved components. Ghosts are appended **directly to `document.body`** (not inside Shadow DOM) so they inherit page stylesheets. Each ghost is `position: fixed` with `pointer-events: none` and a high `z-index` (2147483644). The original element is dimmed to `opacity: 0.3`. Ghosts are created via `el.cloneNode(true)` and marked with `data-sketch-ui-ghost="true"` so SketchUI tools can identify and skip them, and so the user's own JavaScript (mutation observers, query selectors) can distinguish them from real DOM.
 
 2. **Annotation Layer** — A full-viewport `<svg>` element inside the Shadow DOM (`position: fixed`, `top: 0`, `left: 0`, `100vw x 100vh`, `pointer-events: none`, `z-index: 2147483645`). Contains draw strokes, text labels, color change badges, and lasso paths. All annotations are children of a single `<g>` wrapper whose `transform` is updated on scroll: `translate(-scrollX, -scrollY)`. All positions are stored in page coordinates (`pageX`/`pageY`). Scroll listener uses `{ passive: true }` and updates are batched via `requestAnimationFrame`.
 
-3. **Interaction Layer** — A transparent full-viewport div (`z-index: 2147483646`, `pointer-events: auto` when a non-Pointer tool is active, `pointer-events: none` when Pointer is active) that captures mouse/stylus events and dispatches them to the active tool. **Covers the page viewport area only (left offset by 48px) — does not overlap the left sidebar.** The sidebar lives in Shadow DOM and handles its own events independently.
+3. **Interaction Layer** — A transparent full-viewport div (`z-index: 2147483646`, `pointer-events: auto` when a non-Pointer tool is active, `pointer-events: none` when Pointer is active) that captures mouse/stylus events and dispatches them to the active tool. Marked with `data-sketch-ui-interaction="true"` for identification. **Covers the page viewport area only (left offset by 48px) — does not overlap the left sidebar.** The sidebar lives in Shadow DOM and handles its own events independently.
 
 ### Relationship to Phase 1
 
