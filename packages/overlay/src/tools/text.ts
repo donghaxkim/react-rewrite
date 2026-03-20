@@ -4,6 +4,7 @@ import type { ComponentRef } from "@sketch-ui/shared";
 import { getToolOptions, addAnnotation } from "../canvas-state.js";
 import { addTextAnnotation } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
+import { COLORS, RADII, FONT_FAMILY } from "../design-tokens.js";
 
 let activeInput: HTMLInputElement | null = null;
 let clickPos: { pageX: number; pageY: number } | null = null;
@@ -29,15 +30,16 @@ export const textHandler: ToolEventHandler = {
       left: ${e.clientX}px;
       top: ${e.clientY}px;
       z-index: 2147483647;
-      background: rgba(0,0,0,0.8);
-      color: white;
-      border: 1px solid #64b5f6;
-      border-radius: 4px;
+      background: ${COLORS.bgPrimary};
+      color: ${COLORS.textPrimary};
+      border: 1.5px solid ${COLORS.accent};
+      border-radius: ${RADII.sm};
       padding: 4px 8px;
       font-size: ${getToolOptions().fontSize}px;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: ${FONT_FAMILY};
       outline: none;
       min-width: 120px;
+      box-shadow: 0 0 0 3px ${COLORS.accentSoft};
     `;
 
     activeInput.addEventListener("keydown", (ke) => {
