@@ -3,7 +3,7 @@ import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumen
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
-import { isInternalName, isFullPageElement } from "./utils/component-filter.js";
+import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
@@ -137,7 +137,7 @@ let selectionLabel: HTMLDivElement | null = null;
 let marqueeBox: HTMLDivElement | null = null;
 
 // Interaction state machine
-type InteractionMode = "idle" | "pending" | "marquee" | "drag";
+type InteractionMode = "idle" | "pending" | "marquee" | "pending-drag" | "drag";
 let mode: InteractionMode = "idle";
 let mouseDownPos: { x: number; y: number } | null = null;
 let mouseDownElement: HTMLElement | null = null;
@@ -154,7 +154,6 @@ const OVERLAY_STYLES = `
     border: 1.5px solid ${COLORS.accent};
     background: ${COLORS.accentSoft};
     z-index: 2147483646;
-    transition: all ${TRANSITIONS.fast};
     display: none;
   }
   .selection-overlay {
@@ -278,19 +277,15 @@ function handleMouseDown(e: MouseEvent): void {
   e.stopPropagation();
 
   const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-  if (!el || el.closest("#sketch-ui-root") || isFullPageElement(el)) return;
+  if (!el || !isValidElement(el)) return;
 
   mouseDownPos = { x: e.clientX, y: e.clientY };
   mouseDownElement = el;
 
-  // Decide: if clicking on the currently selected element → drag mode
+  // Decide: if clicking on the currently selected element → pending drag
   // Otherwise → selection/marquee mode
   if (currentSelection && selectedElement && selectedElement.contains(el)) {
-    mode = "drag";
-    // Notify drag system immediately so it can set up preview
-    if (onDragStartCallback) {
-      onDragStartCallback(e, selectedElement, currentSelection);
-    }
+    mode = "pending-drag"; // Will become "drag" if moved > 5px, or re-select child on click
   } else {
     mode = "pending"; // Will become "marquee" if dragged > 10px, or "click" on mouseup
   }
@@ -302,6 +297,19 @@ function handleMouseMove(e: MouseEvent): void {
   if (mode === "drag") {
     // Delegate to drag system
     if (onDragMoveCallback) onDragMoveCallback(e);
+    return;
+  }
+
+  if (mode === "pending-drag" && mouseDownPos) {
+    const dx = Math.abs(e.clientX - mouseDownPos.x);
+    const dy = Math.abs(e.clientY - mouseDownPos.y);
+    if (dx > 5 || dy > 5) {
+      mode = "drag";
+      // Now start the actual drag
+      if (onDragStartCallback && selectedElement && currentSelection) {
+        onDragStartCallback(e, selectedElement, currentSelection);
+      }
+    }
     return;
   }
 
@@ -329,7 +337,7 @@ function handleMouseMove(e: MouseEvent): void {
   // Hover highlight (only when idle — no mouse button down)
   if (mode === "idle") {
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-    if (!el || el.closest("#sketch-ui-root") || isFullPageElement(el)) {
+    if (!el || !isValidElement(el)) {
       hideHoverOverlay();
       return;
     }
@@ -354,6 +362,14 @@ function handleMouseUp(e: MouseEvent): void {
 
   if (prevMode === "drag") {
     if (onDragEndCallback) onDragEndCallback(e);
+    mouseDownPos = null;
+    mouseDownElement = null;
+    return;
+  }
+
+  // pending-drag without enough movement → click to select the child element
+  if (prevMode === "pending-drag" && mouseDownElement) {
+    selectElement(mouseDownElement);
     mouseDownPos = null;
     mouseDownElement = null;
     return;
