@@ -2,7 +2,7 @@
 import type { ToolEventHandler } from "../interaction.js";
 import { getSelection, getSelectedElement } from "../selection.js";
 import { setActiveTool, getGhosts, moveGhost } from "../canvas-state.js";
-import { createGhost, updateGhostPosition, findGhostAtPoint } from "../ghost-layer.js";
+import { createGhost, updateGhostPosition, findGhostAtPoint, setGhostDragging, setGhostSettled } from "../ghost-layer.js";
 import type { GhostEntry } from "../canvas-state.js";
 
 let dragTarget: GhostEntry | null = null;
@@ -21,6 +21,7 @@ export const moveHandler: ToolEventHandler = {
         y: e.clientY + window.scrollY - existingGhost.currentPos.y,
       };
       isDragging = true;
+      setGhostDragging(dragTarget.id);
       return;
     }
 
@@ -49,6 +50,7 @@ export const moveHandler: ToolEventHandler = {
       y: e.clientY + window.scrollY - ghost.currentPos.y,
     };
     isDragging = true;
+    setGhostDragging(dragTarget.id);
   },
 
   onMouseMove(e: MouseEvent) {
@@ -60,8 +62,8 @@ export const moveHandler: ToolEventHandler = {
 
   onMouseUp(_e: MouseEvent) {
     if (isDragging && dragTarget) {
-      // Position already updated — ghost stays where it is
       moveGhost(dragTarget.id, dragTarget.currentPos);
+      setGhostSettled(dragTarget.id);
     }
     dragTarget = null;
     isDragging = false;

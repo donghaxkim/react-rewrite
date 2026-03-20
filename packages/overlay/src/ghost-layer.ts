@@ -1,6 +1,7 @@
 // packages/overlay/src/ghost-layer.ts
 import type { ComponentRef } from "@sketch-ui/shared";
 import { addGhost, removeGhost, getGhosts, getOriginalsHidden, type GhostEntry } from "./canvas-state.js";
+import { SHADOWS, TRANSITIONS } from "./design-tokens.js";
 
 const GHOST_Z_INDEX = "2147483644";
 
@@ -38,6 +39,7 @@ export function createGhost(
   cloneEl.style.pointerEvents = "none";
   cloneEl.style.margin = "0";
   cloneEl.style.boxSizing = "border-box";
+  cloneEl.style.boxShadow = SHADOWS.sm;
 
   document.body.appendChild(cloneEl);
 
@@ -86,4 +88,21 @@ export function findGhostAtPoint(clientX: number, clientY: number): GhostEntry |
 
 export function destroyGhostLayer(): void {
   window.removeEventListener("scroll", syncGhostScroll);
+}
+
+/** Apply dragging visual state to a ghost */
+export function setGhostDragging(id: string): void {
+  const ghost = getGhosts().get(id);
+  if (!ghost) return;
+  ghost.cloneEl.style.boxShadow = SHADOWS.lg;
+  ghost.cloneEl.style.opacity = "0.9";
+  ghost.cloneEl.style.transition = `box-shadow ${TRANSITIONS.settle}`;
+}
+
+/** Apply settled visual state to a ghost (after drop) */
+export function setGhostSettled(id: string): void {
+  const ghost = getGhosts().get(id);
+  if (!ghost) return;
+  ghost.cloneEl.style.boxShadow = SHADOWS.sm;
+  ghost.cloneEl.style.opacity = "1";
 }
