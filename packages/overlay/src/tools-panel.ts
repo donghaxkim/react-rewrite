@@ -384,6 +384,17 @@ function updateSubOptions(tool: ToolType): void {
   }
 }
 
+export function flashToolButton(tool: ToolType): void {
+  const btn = toolButtons.get(tool);
+  if (!btn) return;
+  btn.style.backgroundColor = COLORS.accentSoft;
+  btn.style.transition = `background-color 300ms ease`;
+  setTimeout(() => {
+    btn.style.backgroundColor = "";
+    btn.style.transition = "";
+  }, 300);
+}
+
 export function destroyToolsPanel(): void {
   document.removeEventListener("keydown", handleToolShortcut, true);
   panelEl?.remove();

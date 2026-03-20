@@ -1,11 +1,11 @@
 // packages/overlay/src/index.ts
 import { connect, disconnect } from "./bridge.js";
-import { mountToolbar, destroyToolbar, updateModeLabel, setOnEyeToggle, setOnGenerate, setOnCanvasUndo, updateEyeButton, updateGenerateButton, showToast } from "./toolbar.js";
+import { mountToolbar, destroyToolbar, setOnEyeToggle, setOnGenerate, setOnCanvasUndo, updateEyeButton, updateGenerateButton, showToast } from "./toolbar.js";
 import { initSelection, deactivateSelection } from "./selection.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
 import { initGhostLayer, destroyGhostLayer } from "./ghost-layer.js";
-import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll } from "./tools-panel.js";
+import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, flashToolButton } from "./tools-panel.js";
 import { initInteraction, destroyInteraction, activateInteraction, registerToolHandler } from "./interaction.js";
 import { showOnboardingHint, dismissOnboarding } from "./onboarding.js";
 import {
@@ -27,15 +27,6 @@ declare global {
   }
 }
 
-const TOOL_LABELS: Record<string, string> = {
-  pointer: "Select",
-  grab: "Grab",
-  move: "Move",
-  draw: "Draw",
-  color: "Color",
-  text: "Text",
-  lasso: "Lasso",
-};
 
 function init(): void {
   const wsPort = window.__SKETCH_UI_WS_PORT__;
@@ -71,6 +62,7 @@ function init(): void {
   // Tool change listener — handles mode switching
   onToolChange((tool, prev) => {
     dismissOnboarding(); // Dismiss onboarding on any tool interaction
+    flashToolButton(tool);
     // Cleanup previous tool
     if (prev === "pointer") deactivatePointer();
     if (prev === "text") cleanupTextTool();
@@ -81,7 +73,6 @@ function init(): void {
     if (tool === "pointer") activatePointer();
     activateInteraction(tool);
     updateActiveToolUI(tool);
-    updateModeLabel(TOOL_LABELS[tool] || tool);
   });
 
   // State change → update generate button
