@@ -6,6 +6,13 @@ let componentInfoEl: HTMLElement | null = null;
 let undoBtn: HTMLButtonElement | null = null;
 let errorTimeout: ReturnType<typeof setTimeout> | null = null;
 let undoCount = 0;
+let generateBtn: HTMLButtonElement | null = null;
+let eyeBtn: HTMLButtonElement | null = null;
+let toastEl: HTMLDivElement | null = null;
+let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+let onEyeToggle: (() => void) | null = null;
+let onGenerate: (() => void) | null = null;
+let onCanvasUndo: (() => boolean) | null = null;
 
 const TOOLBAR_STYLES = `
   :host {
@@ -76,6 +83,37 @@ const TOOLBAR_STYLES = `
   .close-btn:hover {
     color: #ef5350;
   }
+  .generate-btn {
+    background: #1e88e5;
+    border: 1px solid #1565c0;
+    color: white;
+  }
+  .generate-btn:hover:not(:disabled) {
+    background: #1565c0;
+  }
+  .eye-btn {
+    background: transparent;
+    border: 1px solid #444;
+    font-size: 14px;
+    padding: 4px 6px;
+  }
+  .toast {
+    position: fixed;
+    bottom: 60px;
+    right: 16px;
+    background: #333;
+    color: #e0e0e0;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    z-index: 2147483647;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .toast.visible {
+    opacity: 1;
+  }
 `;
 
 export function mountToolbar(onClose: () => void): void {
@@ -95,7 +133,9 @@ export function mountToolbar(onClose: () => void): void {
     <span class="mode">Select</span>
     <span class="divider"></span>
     <span class="component-info">No selection</span>
-    <button class="undo-btn" disabled>Undo</button>
+    <button class="generate-btn" disabled>Generate</button>
+    <button class="eye-btn" title="Toggle originals (.)">👁</button>
+    <button class="undo-btn" disabled>Undo Reorder</button>
     <button class="close-btn">&times;</button>
   `;
 
@@ -105,6 +145,13 @@ export function mountToolbar(onClose: () => void): void {
   componentInfoEl = toolbar.querySelector(".component-info");
   undoBtn = toolbar.querySelector(".undo-btn");
   const closeBtn = toolbar.querySelector(".close-btn");
+  generateBtn = toolbar.querySelector(".generate-btn");
+  eyeBtn = toolbar.querySelector(".eye-btn");
+
+  // Toast element
+  toastEl = document.createElement("div");
+  toastEl.className = "toast";
+  shadowRoot.appendChild(toastEl);
 
   undoBtn!.addEventListener("click", () => {
     send({ type: "undo" });
@@ -112,6 +159,27 @@ export function mountToolbar(onClose: () => void): void {
   });
 
   closeBtn!.addEventListener("click", onClose);
+
+  // Eye toggle button
+  eyeBtn!.addEventListener("click", () => {
+    if (onEyeToggle) onEyeToggle();
+  });
+
+  // Generate button
+  generateBtn!.addEventListener("click", () => {
+    if (onGenerate) onGenerate();
+  });
+
+  // Keyboard shortcuts: `.` for eye toggle, Ctrl+Z for canvas undo
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "." && !isTextInputFocused()) {
+      if (onEyeToggle) onEyeToggle();
+    }
+    // Canvas undo — callback returns true if it handled the undo, false if in Pointer mode
+    if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !isTextInputFocused()) {
+      if (onCanvasUndo?.()) e.preventDefault();
+    }
+  });
 
   // Show reconnect button when max retries exhausted
   setOnMaxRetries(() => {
@@ -203,4 +271,36 @@ export function destroyToolbar(): void {
 
 export function getShadowRoot(): ShadowRoot | null {
   return shadowRoot;
+}
+
+export function setOnEyeToggle(fn: () => void): void { onEyeToggle = fn; }
+export function setOnGenerate(fn: () => void): void { onGenerate = fn; }
+export function setOnCanvasUndo(fn: () => boolean): void { onCanvasUndo = fn; }
+
+export function updateEyeButton(hidden: boolean): void {
+  if (eyeBtn) eyeBtn.textContent = hidden ? "👁‍🗨" : "👁";
+}
+
+export function updateGenerateButton(enabled: boolean): void {
+  if (generateBtn) generateBtn.disabled = !enabled;
+}
+
+export function showToast(message: string): void {
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.classList.add("visible");
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => {
+    toastEl?.classList.remove("visible");
+  }, 2000);
+}
+
+export function updateModeLabel(label: string): void {
+  const modeEl = getShadowRoot()?.querySelector(".mode");
+  if (modeEl) modeEl.textContent = label;
+}
+
+function isTextInputFocused(): boolean {
+  const active = document.activeElement;
+  return active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement;
 }
