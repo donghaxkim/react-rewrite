@@ -1,5 +1,6 @@
 // packages/overlay/src/interaction.ts
-import { getActiveTool } from "./canvas-state.js";
+import { getActiveTool, getToolOptions } from "./canvas-state.js";
+import { moveCursorSvg, drawCursorSvg, colorCursorSvg, lassoCursorSvg } from "./design-tokens.js";
 
 export type ToolEventHandler = {
   onMouseDown?: (e: MouseEvent) => void | Promise<void>;
@@ -21,8 +22,8 @@ export function initInteraction(): void {
   interactionEl.style.cssText = `
     position: fixed;
     top: 0;
-    left: 48px;
-    width: calc(100vw - 48px);
+    left: 0;
+    width: 100vw;
     height: 100vh;
     z-index: 2147483646;
     pointer-events: none;
@@ -44,22 +45,29 @@ export function initInteraction(): void {
 export function activateInteraction(tool: string): void {
   activeHandler = toolHandlers.get(tool) || null;
   if (interactionEl) {
-    // Pointer mode: interaction layer is transparent, selection.ts handles events
     interactionEl.style.pointerEvents = tool === "pointer" ? "none" : "auto";
   }
+  updateCursor(tool);
+}
 
-  // Update cursor
-  const cursors: Record<string, string> = {
-    pointer: "default",
-    grab: "grab",
-    move: "move",
-    draw: "crosshair",
-    color: "pointer",
-    text: "text",
-    lasso: "crosshair",
-  };
-  if (interactionEl) {
-    interactionEl.style.cursor = cursors[tool] || "default";
+function updateCursor(tool: string): void {
+  if (!interactionEl) return;
+  switch (tool) {
+    case "pointer": interactionEl.style.cursor = "default"; break;
+    case "grab": interactionEl.style.cursor = "grab"; break;
+    case "move": interactionEl.style.cursor = moveCursorSvg(); break;
+    case "draw": interactionEl.style.cursor = drawCursorSvg(getToolOptions().brushSize); break;
+    case "color": interactionEl.style.cursor = colorCursorSvg(); break;
+    case "text": interactionEl.style.cursor = "text"; break;
+    case "lasso": interactionEl.style.cursor = lassoCursorSvg(); break;
+    default: interactionEl.style.cursor = "default";
+  }
+}
+
+/** Call when brush size changes to update the draw cursor */
+export function refreshDrawCursor(): void {
+  if (getActiveTool() === "draw" && interactionEl) {
+    interactionEl.style.cursor = drawCursorSvg(getToolOptions().brushSize);
   }
 }
 
