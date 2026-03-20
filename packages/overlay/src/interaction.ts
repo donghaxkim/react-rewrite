@@ -78,6 +78,14 @@ export function setInteractionCursor(cursor: string): void {
   if (interactionEl) interactionEl.style.cursor = cursor;
 }
 
+/** Temporarily disable/enable the interaction layer's pointer events.
+ *  Used by color picker to prevent the interaction layer from stealing clicks. */
+export function setInteractionPointerEvents(enabled: boolean): void {
+  if (interactionEl) {
+    interactionEl.style.pointerEvents = enabled ? "auto" : "none";
+  }
+}
+
 /**
  * Find the actual page element at a viewport point, looking through all SketchUI layers.
  * Uses elementsFromPoint to skip the interaction layer, shadow DOM host, and ghost elements.

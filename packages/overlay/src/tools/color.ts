@@ -1,5 +1,6 @@
 // packages/overlay/src/tools/color.ts
 import type { ToolEventHandler } from "../interaction.js";
+import { getPageElementAtPoint, setInteractionPointerEvents } from "../interaction.js";
 import { addAnnotation, type ColorOverrideRuntime } from "../canvas-state.js";
 import { addColorBadge } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
@@ -14,8 +15,8 @@ export const colorHandler: ToolEventHandler = {
   async onMouseDown(e: MouseEvent) {
     closeColorPicker();
 
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-    if (!el || el.closest("#sketch-ui-root") || el.hasAttribute("data-sketch-ui-ghost")) return;
+    const el = getPageElementAtPoint(e.clientX, e.clientY);
+    if (!el) return;
 
     targetEl = el;
     originalValues = {
@@ -28,6 +29,9 @@ export const colorHandler: ToolEventHandler = {
     targetComp = comp;
 
     const initialColor = rgbToHex(originalValues.bg);
+
+    // Disable interaction layer so the picker can receive clicks
+    setInteractionPointerEvents(false);
 
     openColorPicker({
       initialColor,
@@ -42,6 +46,8 @@ export const colorHandler: ToolEventHandler = {
         selectedProperty = prop;
       },
       onClose() {
+        // Re-enable interaction layer
+        setInteractionPointerEvents(true);
         if (!targetEl || !targetComp) return;
         const fromColor = selectedProperty === "backgroundColor" ? originalValues.bg : originalValues.color;
         const toColor = (targetEl.style as any)[selectedProperty];
@@ -76,6 +82,7 @@ function rgbToHex(rgb: string): string {
 
 export function cleanupColorTool(): void {
   closeColorPicker();
+  setInteractionPointerEvents(true);
   targetEl = null;
   targetComp = null;
 }

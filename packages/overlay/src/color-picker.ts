@@ -252,7 +252,9 @@ export function openColorPicker(opts: ColorPickerOptions): void {
   document.addEventListener("keydown", onKey, true);
 
   const onClickOutside = (e: MouseEvent) => {
-    if (activePickerEl && !activePickerEl.contains(e.target as Node)) {
+    // Use composedPath to see through Shadow DOM boundaries —
+    // e.target is retargeted to the host element, so contains() fails
+    if (activePickerEl && !e.composedPath().includes(activePickerEl)) {
       closeColorPicker();
     }
   };
