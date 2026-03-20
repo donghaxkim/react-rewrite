@@ -204,6 +204,10 @@ export function hasChanges(): boolean {
   return ghosts.size > 0 || annotations.length > 0;
 }
 
+export function canUndo(): boolean {
+  return undoStack.length > 0;
+}
+
 // --- Serialization ---
 
 export function serializeAnnotations(): SerializedAnnotations {

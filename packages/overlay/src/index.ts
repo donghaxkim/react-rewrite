@@ -5,12 +5,12 @@ import { initSelection, deactivateSelection } from "./selection.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
 import { initGhostLayer, destroyGhostLayer } from "./ghost-layer.js";
-import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, flashToolButton } from "./tools-panel.js";
+import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, setOnCanvasUndo as setOnCanvasUndoPanel, updateCanvasUndoButton, flashToolButton } from "./tools-panel.js";
 import { initInteraction, destroyInteraction, activateInteraction, registerToolHandler } from "./interaction.js";
 import { showOnboardingHint, dismissOnboarding } from "./onboarding.js";
 import {
   onToolChange, onStateChange, getActiveTool, setActiveTool,
-  canvasUndo, resetCanvas, hasChanges, serializeAnnotations,
+  canvasUndo, canUndo, resetCanvas, hasChanges, serializeAnnotations,
   getOriginalsHidden, setOriginalsHidden,
 } from "./canvas-state.js";
 import { activatePointer, deactivatePointer } from "./tools/pointer.js";
@@ -75,9 +75,16 @@ function init(): void {
     updateActiveToolUI(tool);
   });
 
-  // State change → update generate button
+  // State change → update generate + canvas undo buttons
   onStateChange(() => {
     updateGenerateButton(hasChanges());
+    updateCanvasUndoButton(canUndo());
+  });
+
+  // Canvas undo from tools panel sidebar
+  setOnCanvasUndoPanel(() => {
+    const description = canvasUndo();
+    if (description) showToast(`Undo: ${description}`);
   });
 
   // Eye toggle — only works when ghosts exist

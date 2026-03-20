@@ -13,6 +13,7 @@ const ICONS = {
   color: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l1-1h3l9-9"/><path d="M13 7l-1.3-1.3a1 1 0 0 0-1.4 0L9 7"/><path d="M16 10l1.3 1.3a1 1 0 0 1 0 1.4L16 14"/><path d="m9 7 6 6"/><path d="M20 2a2.83 2.83 0 0 1 0 4L16 10"/></svg>`,
   text: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
   lasso: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4c-4.42 0-8 2.24-8 5 0 1.72 1.3 3.24 3.3 4.2"/><path d="M12 4c4.42 0 8 2.24 8 5 0 2.76-3.58 5-8 5"/><path d="M7.3 13.2C5.71 14.08 5 15.27 5 16.5c0 2.49 3.13 4.5 7 4.5s7-2.01 7-4.5c0-1.23-.71-2.42-2.3-3.3"/></svg>`,
+  undo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>`,
   trash: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
 };
 
@@ -209,9 +210,16 @@ const PANEL_STYLES = `
 let panelEl: HTMLDivElement | null = null;
 let subOptionsEl: HTMLDivElement | null = null;
 let toolButtons: Map<ToolType, HTMLButtonElement> = new Map();
+let canvasUndoBtn: HTMLButtonElement | null = null;
 let onClearAll: (() => void) | null = null;
+let onCanvasUndo: (() => void) | null = null;
 
 export function setOnClearAll(fn: () => void): void { onClearAll = fn; }
+export function setOnCanvasUndo(fn: () => void): void { onCanvasUndo = fn; }
+
+export function updateCanvasUndoButton(enabled: boolean): void {
+  if (canvasUndoBtn) canvasUndoBtn.disabled = !enabled;
+}
 
 export function initToolsPanel(): void {
   const shadowRoot = getShadowRoot();
@@ -264,15 +272,23 @@ export function initToolsPanel(): void {
   subOptionsEl.className = "sub-options hidden";
   panelEl.appendChild(subOptionsEl);
 
-  // Clear All divider + button
-  const clearDivider = document.createElement("div");
-  clearDivider.className = "tool-divider";
-  panelEl.appendChild(clearDivider);
+  // Bottom section: undo + reset
+  const bottomDivider = document.createElement("div");
+  bottomDivider.className = "tool-divider";
+  panelEl.appendChild(bottomDivider);
+
+  canvasUndoBtn = document.createElement("button");
+  canvasUndoBtn.className = "clear-btn";
+  canvasUndoBtn.innerHTML = ICONS.undo;
+  canvasUndoBtn.title = "Undo (Ctrl+Z)";
+  canvasUndoBtn.disabled = true;
+  canvasUndoBtn.addEventListener("click", () => { if (onCanvasUndo) onCanvasUndo(); });
+  panelEl.appendChild(canvasUndoBtn);
 
   const clearBtn = document.createElement("button");
   clearBtn.className = "clear-btn";
   clearBtn.innerHTML = ICONS.trash;
-  clearBtn.title = "Clear All";
+  clearBtn.title = "Reset Canvas";
   clearBtn.addEventListener("click", () => { if (onClearAll) onClearAll(); });
   panelEl.appendChild(clearBtn);
 

@@ -337,6 +337,7 @@ export function updateGenerateButton(enabled: boolean): void {
   if (generateBtn) generateBtn.disabled = !enabled;
 }
 
+
 /**
  * Update the component detail section in the action bar.
  * Shows tag name, component name, and file path.

@@ -27,3 +27,17 @@ export function isInternalName(name: string): boolean {
   if (name === "Head" || name === "html" || name === "body") return true;
   return false;
 }
+
+/** Returns true if the element is effectively the whole page and should not be selectable. */
+export function isFullPageElement(el: HTMLElement): boolean {
+  const tag = el.tagName.toLowerCase();
+  if (tag === "html" || tag === "body") return true;
+
+  // Skip elements that cover ≥90% of the viewport in both dimensions
+  const rect = el.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  if (rect.width >= vw * 0.9 && rect.height >= vh * 0.9) return true;
+
+  return false;
+}

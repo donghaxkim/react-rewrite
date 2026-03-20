@@ -3,7 +3,7 @@ import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumen
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
-import { isInternalName } from "./utils/component-filter.js";
+import { isInternalName, isFullPageElement } from "./utils/component-filter.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
@@ -278,7 +278,7 @@ function handleMouseDown(e: MouseEvent): void {
   e.stopPropagation();
 
   const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-  if (!el || el.closest("#sketch-ui-root")) return;
+  if (!el || el.closest("#sketch-ui-root") || isFullPageElement(el)) return;
 
   mouseDownPos = { x: e.clientX, y: e.clientY };
   mouseDownElement = el;
@@ -329,7 +329,7 @@ function handleMouseMove(e: MouseEvent): void {
   // Hover highlight (only when idle — no mouse button down)
   if (mode === "idle") {
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-    if (!el || el.closest("#sketch-ui-root")) {
+    if (!el || el.closest("#sketch-ui-root") || isFullPageElement(el)) {
       hideHoverOverlay();
       return;
     }
