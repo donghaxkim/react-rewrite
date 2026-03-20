@@ -4,6 +4,7 @@ import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
+import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget } from "./highlight-canvas.js";
 
@@ -396,33 +397,14 @@ async function selectElement(el: HTMLElement): Promise<void> {
   }
 }
 
-function performMarqueeSelect(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number
-): void {
-  const elements: HTMLElement[] = [];
-  const allElements = Array.from(document.querySelectorAll("*"));
-
-  for (const el of allElements) {
-    if (el.closest("#sketch-ui-root")) continue;
-    const rect = el.getBoundingClientRect();
-    if (
-      rect.left < x2 &&
-      rect.right > x1 &&
-      rect.top < y2 &&
-      rect.bottom > y1 &&
-      rect.width > 0 &&
-      rect.height > 0
-    ) {
-      elements.push(el as HTMLElement);
-    }
-  }
+function performMarqueeSelect(x1: number, y1: number, x2: number, y2: number): void {
+  const elements = getElementsInArea({
+    x: x1, y: y1,
+    width: x2 - x1, height: y2 - y1,
+  });
 
   if (elements.length === 0) return;
 
-  // Use sync resolve for marquee (fast path)
   const stacks: Array<ComponentInfo["stack"]> = [];
   for (const el of elements.slice(0, 50)) {
     const resolved = resolveComponentSync(el);
@@ -438,12 +420,9 @@ function performMarqueeSelect(
 
   for (const el of elements) {
     const resolved = resolveComponentSync(el);
-    if (
-      resolved &&
-      resolved.componentName === lca.componentName
-    ) {
+    if (resolved && resolved.componentName === lca.componentName) {
       const rect = el.getBoundingClientRect();
-      selectedElement = el as HTMLElement;
+      selectedElement = el;
       currentSelection = {
         tagName: el.tagName.toLowerCase(),
         componentName: lca.componentName,
@@ -451,16 +430,9 @@ function performMarqueeSelect(
         lineNumber: lca.lineNumber,
         columnNumber: lca.columnNumber,
         stack: resolved.stack,
-        boundingRect: {
-          top: rect.top,
-          left: rect.left,
-          width: rect.width,
-          height: rect.height,
-        },
+        boundingRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
       };
-
       showSelectionOverlay(rect, currentSelection);
-
       if (selectionLabel) {
         const pathText = lca.filePath ? `${lca.filePath}:${lca.lineNumber}` : "";
         selectionLabel.innerHTML = `<span class="comp-name">${lca.componentName}</span>${pathText ? `<span class="comp-path">${pathText}</span>` : ""}`;

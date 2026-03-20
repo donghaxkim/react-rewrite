@@ -1,7 +1,8 @@
 // packages/overlay/src/tools/lasso.ts
 import type { ToolEventHandler } from "../interaction.js";
 import { getShadowRoot } from "../toolbar.js";
-import { resolveComponentAtPoint } from "./resolve-helper.js";
+import { resolveComponentFromElement } from "./resolve-helper.js";
+import { getElementsInArea } from "../utils/area-selection.js";
 import { COLORS } from "../design-tokens.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -45,44 +46,28 @@ export const lassoHandler: ToolEventHandler = {
       return;
     }
 
-    // Close the path and find intersecting components
     const bounds = getLassoBounds();
     cleanupLassoVisual();
 
-    // Find all elements within the lasso bounds
-    const allElements = document.querySelectorAll("*");
+    const elements = getElementsInArea({
+      x: bounds.left,
+      y: bounds.top,
+      width: bounds.right - bounds.left,
+      height: bounds.bottom - bounds.top,
+    });
+
     const seen = new Set<string>();
-
-    // Collect candidate elements first, then resolve components in parallel
-    const candidates: Array<{ el: HTMLElement; rect: DOMRect }> = [];
-    for (const el of allElements) {
-      if (el.closest("#sketch-ui-root")) continue;
-      if ((el as HTMLElement).hasAttribute?.("data-sketch-ui-ghost")) continue;
-
-      const rect = el.getBoundingClientRect();
-      if (
-        rect.left < bounds.right && rect.right > bounds.left &&
-        rect.top < bounds.bottom && rect.bottom > bounds.top &&
-        rect.width > 0 && rect.height > 0
-      ) {
-        candidates.push({ el: el as HTMLElement, rect });
-      }
-    }
-
-    // Resolve all components in parallel
     const results = await Promise.all(
-      candidates.map(({ rect }) =>
-        resolveComponentAtPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-      )
+      elements.map(el => resolveComponentFromElement(el))
     );
 
-    for (let i = 0; i < candidates.length; i++) {
+    for (let i = 0; i < elements.length; i++) {
       const comp = results[i];
-      const { el, rect } = candidates[i];
+      const el = elements[i];
       if (comp && !seen.has(`${comp.filePath}:${comp.lineNumber}`)) {
         seen.add(`${comp.filePath}:${comp.lineNumber}`);
         selectedElements.push(el);
-        showSelectionBorder(rect);
+        showSelectionBorder(el.getBoundingClientRect());
       }
     }
   },
