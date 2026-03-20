@@ -1,0 +1,17 @@
+{
+  "name": "@sketch-ui/overlay",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsup"
+  },
+  "dependencies": {
+    "react-grab": "latest",
+    "element-source": "latest"
+  },
+  "devDependencies": {
+    "@sketch-ui/shared": "workspace:*",
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
+  }
+}

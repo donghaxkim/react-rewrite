@@ -1,0 +1,31 @@
+{
+  "name": "sketch-ui",
+  "version": "0.1.0",
+  "bin": {
+    "sketch-ui": "./bin/sketch-ui.js"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc && cp ../overlay/dist/overlay.js dist/overlay.js",
+    "dev": "tsc --watch",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "chalk": "^5.4.0",
+    "commander": "^13.0.0",
+    "http-proxy": "^1.18.1",
+    "jscodeshift": "^17.1.0",
+    "open": "^10.1.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@sketch-ui/shared": "workspace:*",
+    "@types/http-proxy": "^1.17.15",
+    "@types/jscodeshift": "^17.3.0",
+    "@types/ws": "^8.5.13",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
