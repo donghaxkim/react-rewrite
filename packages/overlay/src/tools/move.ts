@@ -1,7 +1,7 @@
 // packages/overlay/src/tools/move.ts
 import type { ToolEventHandler } from "../interaction.js";
 import { getSelection, getSelectedElement } from "../selection.js";
-import { setActiveTool, getGhosts, moveGhost } from "../canvas-state.js";
+import { setActiveTool, getGhosts, moveGhost, hasGhostForElement } from "../canvas-state.js";
 import { createGhost, updateGhostPosition, findGhostAtPoint, setGhostDragging, setGhostSettled } from "../ghost-layer.js";
 import type { GhostEntry } from "../canvas-state.js";
 
@@ -37,6 +37,23 @@ export const moveHandler: ToolEventHandler = {
     // Use the actual selected DOM element (not elementFromPoint which may hit wrong element)
     const el = getSelectedElement();
     if (!el) return;
+
+    // Prevent creating duplicate ghosts for the same element
+    if (hasGhostForElement(el)) {
+      // Find the existing ghost and drag it instead
+      for (const ghost of getGhosts().values()) {
+        if (ghost.originalEl === el) {
+          dragTarget = ghost;
+          dragOffset = {
+            x: e.clientX + window.scrollX - ghost.currentPos.x,
+            y: e.clientY + window.scrollY - ghost.currentPos.y,
+          };
+          isDragging = true;
+          setGhostDragging(dragTarget.id);
+          return;
+        }
+      }
+    }
 
     const ghost = createGhost(el, {
       componentName: selection.componentName,

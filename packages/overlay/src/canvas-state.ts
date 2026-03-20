@@ -122,11 +122,20 @@ export function setOriginalsHidden(hidden: boolean): void {
       ghost.originalEl.style.opacity = "0";
       ghost.originalEl.style.visibility = "hidden";
     } else {
+      // Restore to dimmed state (ghost exists, so original stays dimmed)
       ghost.originalEl.style.opacity = "0.3";
       ghost.originalEl.style.visibility = "visible";
     }
   }
   notifyStateChange();
+}
+
+/** Check if an element already has a ghost clone */
+export function hasGhostForElement(el: HTMLElement): boolean {
+  for (const ghost of ghosts.values()) {
+    if (ghost.originalEl === el) return true;
+  }
+  return false;
 }
 
 // --- Undo ---

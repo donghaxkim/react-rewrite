@@ -9,6 +9,7 @@ let generateBtn: HTMLButtonElement | null = null;
 let eyeBtn: HTMLButtonElement | null = null;
 let toastEl: HTMLDivElement | null = null;
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+let componentDetailEl: HTMLDivElement | null = null;
 let onEyeToggle: (() => void) | null = null;
 let onGenerate: (() => void) | null = null;
 let onCanvasUndo: (() => boolean) | null = null;
@@ -110,6 +111,37 @@ const TOOLBAR_STYLES = `
     color: ${COLORS.textTertiary};
     cursor: default;
   }
+  .component-detail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 280px;
+    overflow: hidden;
+  }
+  .component-detail .tag {
+    color: ${COLORS.accent};
+    font-size: 11px;
+    font-weight: 600;
+    font-family: monospace;
+    flex-shrink: 0;
+  }
+  .component-detail .name {
+    color: ${COLORS.textPrimary};
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .component-detail .path {
+    color: ${COLORS.textTertiary};
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .component-detail.empty {
+    color: ${COLORS.textTertiary};
+    font-size: 12px;
+  }
   .toast {
     position: fixed;
     bottom: 68px;
@@ -156,10 +188,11 @@ export function mountToolbar(onClose: () => void): void {
   toolbar.className = "toolbar";
 
   toolbar.innerHTML = `
+    <div class="component-detail empty">No selection</div>
+    <span class="divider"></span>
     <button class="icon-btn eye-btn" title="Toggle originals (.)">
       ${EYE_OPEN_SVG}
     </button>
-    <span class="divider"></span>
     <button class="icon-btn undo-btn" disabled title="Undo Reorder">
       ${UNDO_SVG}
     </button>
@@ -177,6 +210,7 @@ export function mountToolbar(onClose: () => void): void {
   const closeBtn = toolbar.querySelector(".close-btn");
   generateBtn = toolbar.querySelector(".generate-btn");
   eyeBtn = toolbar.querySelector(".eye-btn");
+  componentDetailEl = toolbar.querySelector(".component-detail");
 
   // Toast element
   toastEl = document.createElement("div");
@@ -301,6 +335,29 @@ export function updateEyeButton(hidden: boolean): void {
 
 export function updateGenerateButton(enabled: boolean): void {
   if (generateBtn) generateBtn.disabled = !enabled;
+}
+
+/**
+ * Update the component detail section in the action bar.
+ * Shows tag name, component name, and file path.
+ */
+export function updateComponentDetail(info: {
+  tagName: string;
+  componentName: string;
+  filePath: string;
+  lineNumber: number;
+} | null): void {
+  if (!componentDetailEl) return;
+  if (!info) {
+    componentDetailEl.className = "component-detail empty";
+    componentDetailEl.textContent = "No selection";
+    return;
+  }
+  componentDetailEl.className = "component-detail";
+  const shortPath = info.filePath
+    ? info.filePath.replace(/^.*?\/src\//, "src/") + ":" + info.lineNumber
+    : "";
+  componentDetailEl.innerHTML = `<span class="tag">&lt;${info.tagName}&gt;</span><span class="name">${info.componentName}</span>${shortPath ? `<span class="path">${shortPath}</span>` : ""}`;
 }
 
 export function showToast(message: string): void {

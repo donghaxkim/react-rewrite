@@ -2,7 +2,7 @@
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";
-import { getShadowRoot } from "./toolbar.js";
+import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName } from "./utils/component-filter.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 
@@ -410,6 +410,14 @@ async function selectElement(el: HTMLElement): Promise<void> {
       const pathText = resolved.filePath ? `${resolved.filePath}:${resolved.lineNumber}` : "";
       selectionLabel.innerHTML = `<span class="comp-name">${resolved.componentName}</span>${pathText ? `<span class="comp-path">${pathText}</span>` : ""}`;
     }
+
+    // Update action bar component detail
+    updateComponentDetail({
+      tagName: resolved.tagName,
+      componentName: resolved.componentName,
+      filePath: resolved.filePath,
+      lineNumber: resolved.lineNumber,
+    });
   } catch (err) {
     console.error("[SketchUI] selectElement error:", err);
   }
@@ -577,6 +585,7 @@ export function clearSelection(): void {
     selectionLabel.classList.remove("visible");
     selectionLabel.style.display = "none";
   }
+  updateComponentDetail(null);
 }
 
 export function getSelection(): ComponentInfo | null {

@@ -80,8 +80,12 @@ function init(): void {
     updateGenerateButton(hasChanges());
   });
 
-  // Eye toggle
+  // Eye toggle — only works when ghosts exist
   setOnEyeToggle(() => {
+    if (!hasChanges()) {
+      showToast("No moved components to toggle");
+      return;
+    }
     const next = !getOriginalsHidden();
     setOriginalsHidden(next);
     updateEyeButton(next);
