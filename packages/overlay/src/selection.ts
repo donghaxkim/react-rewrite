@@ -233,6 +233,8 @@ export function initSelection(): void {
   document.addEventListener("mousemove", handleMouseMove, true);
   document.addEventListener("mouseup", handleMouseUp, true);
   document.addEventListener("keydown", handleKeyDown, true);
+  document.addEventListener("scroll", updateSelectionPosition, true);
+  window.addEventListener("resize", updateSelectionPosition);
   listenersAttached = true;
 }
 
@@ -514,6 +516,31 @@ function showSelectionOverlay(rect: DOMRect, _info: any): void {
   }
 }
 
+/** Update selection highlight + label to track the selected element on scroll/resize */
+function updateSelectionPosition(): void {
+  if (!selectedElement || !currentSelection) return;
+  const rect = selectedElement.getBoundingClientRect();
+  const br = parseFloat(getComputedStyle(selectedElement).borderRadius) || 4;
+  setSelectionTarget(rect, br + 2);
+
+  // Reposition label
+  if (selectionLabel && selectionLabel.style.display !== "none") {
+    const labelHeight = 28;
+    const gap = 8;
+    let top = rect.top - labelHeight - gap;
+    if (top < 0) top = rect.bottom + gap;
+    selectionLabel.style.left = `${rect.left}px`;
+    selectionLabel.style.top = `${top}px`;
+    selectionLabel.style.right = "auto";
+
+    const labelRect = selectionLabel.getBoundingClientRect();
+    if (labelRect.right > window.innerWidth - 8) {
+      selectionLabel.style.left = "auto";
+      selectionLabel.style.right = "8px";
+    }
+  }
+}
+
 function hideHoverOverlay(): void {
   setHoverTarget(null);
 }
@@ -539,6 +566,8 @@ export function deactivateSelection(): void {
   document.removeEventListener("mousemove", handleMouseMove, true);
   document.removeEventListener("mouseup", handleMouseUp, true);
   document.removeEventListener("keydown", handleKeyDown, true);
+  document.removeEventListener("scroll", updateSelectionPosition, true);
+  window.removeEventListener("resize", updateSelectionPosition);
   listenersAttached = false;
   selectionLabel?.remove();
   selectionLabel = null;
@@ -556,6 +585,8 @@ export function setEnabled(enabled: boolean): void {
     document.addEventListener("mousemove", handleMouseMove, true);
     document.addEventListener("mouseup", handleMouseUp, true);
     document.addEventListener("keydown", handleKeyDown, true);
+    document.addEventListener("scroll", updateSelectionPosition, true);
+    window.addEventListener("resize", updateSelectionPosition);
     listenersAttached = true;
     isActive = true;
   } else if (!enabled && listenersAttached) {
@@ -563,6 +594,8 @@ export function setEnabled(enabled: boolean): void {
     document.removeEventListener("mousemove", handleMouseMove, true);
     document.removeEventListener("mouseup", handleMouseUp, true);
     document.removeEventListener("keydown", handleKeyDown, true);
+    document.removeEventListener("scroll", updateSelectionPosition, true);
+    window.removeEventListener("resize", updateSelectionPosition);
     listenersAttached = false;
     isActive = false;
   }
