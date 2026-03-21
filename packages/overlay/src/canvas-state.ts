@@ -18,6 +18,11 @@ export interface GhostEntry {
 /** Runtime extension of ColorOverride — adds the DOM element reference (not serializable). */
 export type ColorOverrideRuntime = ColorOverride & { targetElement: HTMLElement };
 
+/** Runtime extension of propertyChange — adds DOM element reference (not serializable). */
+export type PropertyChangeRuntime = Extract<CanvasUndoAction, { type: "propertyChange" }> & {
+  element: HTMLElement;
+};
+
 let ghosts: Map<string, GhostEntry> = new Map();
 let annotations: Annotation[] = [];
 let undoStack: CanvasUndoAction[] = [];
@@ -170,8 +175,26 @@ export function canvasUndo(): string | null {
       removeAnnotation(action.annotationId);
       return "color reverted";
     }
+    case "propertyChange": {
+      const propAction = action as PropertyChangeRuntime;
+      if (propAction.element && document.contains(propAction.element)) {
+        for (const override of propAction.overrides) {
+          (propAction.element.style as any)[override.cssProperty] = override.previousValue;
+        }
+      }
+      return "property reverted";
+    }
   }
   return null;
+}
+
+export function pushUndoAction(action: CanvasUndoAction): void {
+  undoStack.push(action);
+  notifyStateChange();
+}
+
+export function peekUndoStack(): CanvasUndoAction | null {
+  return undoStack.length > 0 ? undoStack[undoStack.length - 1] : null;
 }
 
 // --- Reset ---
