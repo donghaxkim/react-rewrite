@@ -156,8 +156,15 @@ interface TailwindTokenMap {
   fontSizeReverse: Record<string, string>;
   fontWeightReverse: Record<string, string>;
   borderRadiusReverse: Record<string, string>;
+  letterSpacing: Record<string, string>;    // "tight" → "-0.025em"
+  lineHeight: Record<string, string>;       // "6" → "1.5rem" (leading-6)
+  letterSpacingReverse: Record<string, string>;
+  lineHeightReverse: Record<string, string>;
   opacityReverse: Record<string, string>;
 }
+
+// Scale reuse: gap uses the "spacing" scale (tailwindScale: "spacing").
+// letter-spacing uses "letterSpacing", line-height uses "lineHeight".
 
 // Note on tailwindScale naming: descriptors use camelCase keys matching the
 // TailwindTokenMap field names (e.g. tailwindScale: "fontSize", not "font-size").
@@ -413,6 +420,7 @@ const SHORTHAND_SPLITS: Record<string, Record<string, string[]>> = {
   // Editing a corner must split both the full shorthand AND the side shorthand.
   "rounded-tl": {
     "rounded-t": ["rounded-tl-{new}", "rounded-tr-{v}"],
+    "rounded-l": ["rounded-tl-{new}", "rounded-bl-{v}"],
     "rounded": ["rounded-tl-{new}", "rounded-tr-{v}", "rounded-br-{v}", "rounded-bl-{v}"],
   },
   "rounded-tr": {
@@ -515,8 +523,23 @@ After re-acquisition, compare computed style of edited properties to expected va
 | {
     type: "propertyChange";
     elementIdentity: ElementIdentity;
+    element: HTMLElement;          // runtime reference (not serializable)
     overrides: Array<{ cssProperty: string; previousValue: string; newValue: string }>;
   }
+```
+
+**Integration with `canvasUndo()`:** The existing `canvasUndo()` returns `string | null` and has no WebSocket dependency. For `propertyChange`, `canvasUndo()` reverts inline styles on the element (same pattern as `colorChange` handling) and returns `"property reverted"`. The **caller** of `canvasUndo()` (the keyboard handler in `interaction.ts`) inspects the returned action type and conditionally sends the CLI undo message. This keeps `canvasUndo()` pure of WebSocket side effects:
+
+```typescript
+// In the Ctrl+Z handler:
+const action = peekUndoStack();  // new helper: peek without popping
+if (action?.type === "propertyChange") {
+  const visualResult = canvasUndo();  // pops + reverts inline styles
+  // Only send CLI undo if this was the most recent CLI operation (LIFO constraint)
+  if (isLatestCliOperation(action)) {
+    ws.send(JSON.stringify({ type: "undo" }));
+  }
+}
 ```
 
 Canvas undo reverts inline styles on the element and sends a file undo to the CLI (same `undo` message type, CLI restores previous file content from its undo stack).
