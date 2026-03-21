@@ -23,6 +23,10 @@ let unsubTransform: (() => void) | null = null;
 // Track original body children so we can unwrap on destroy
 let originalBodyChildren: Node[] = [];
 
+// Saved original backgrounds to restore on destroy
+let savedBodyBg = "";
+let savedHtmlBg = "";
+
 /**
  * Initialize the infinite canvas.
  * - Wraps existing page content in a transform container
@@ -30,6 +34,19 @@ let originalBodyChildren: Node[] = [];
  * - Subscribes to canvas transform state changes
  */
 export function initCanvasTransform(): void {
+  // Save and clear body/html backgrounds so the dotted bg shows through
+  savedBodyBg = document.body.style.background || document.body.style.backgroundColor || "";
+  savedHtmlBg = document.documentElement.style.background || document.documentElement.style.backgroundColor || "";
+  const computedBodyBg = getComputedStyle(document.body).backgroundColor;
+  const computedHtmlBg = getComputedStyle(document.documentElement).backgroundColor;
+  // Use the page's original bg for the wrapper (default to white)
+  const pageBg = (computedBodyBg && computedBodyBg !== "rgba(0, 0, 0, 0)") ? computedBodyBg
+    : (computedHtmlBg && computedHtmlBg !== "rgba(0, 0, 0, 0)") ? computedHtmlBg
+    : "#ffffff";
+
+  document.body.style.background = "transparent";
+  document.documentElement.style.background = "transparent";
+
   // Create the wrapper that will hold page content
   wrapper = document.createElement("div");
   wrapper.setAttribute("data-sketch-ui-canvas-wrapper", "true");
@@ -38,9 +55,10 @@ export function initCanvasTransform(): void {
     min-width: 100vw;
     min-height: 100vh;
     position: relative;
+    background: ${pageBg};
   `.trim().replace(/\n\s*/g, " ");
 
-  // Create dotted background (sits behind everything, fixed position)
+  // Create dotted background (sits behind wrapper, covers viewport)
   dotBg = document.createElement("div");
   dotBg.setAttribute("data-sketch-ui-dot-bg", "true");
   dotBg.style.cssText = `
@@ -49,7 +67,7 @@ export function initCanvasTransform(): void {
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: -1;
+    z-index: 0;
     pointer-events: none;
     background-color: ${COLORS.bgSecondary};
   `.trim().replace(/\n\s*/g, " ");
@@ -73,6 +91,10 @@ export function initCanvasTransform(): void {
     originalBodyChildren.push(child);
     wrapper.appendChild(child);
   }
+
+  // Wrapper needs to sit above the dot background
+  wrapper.style.position = "relative";
+  wrapper.style.zIndex = "1";
 
   // Insert bg and wrapper into body (before SketchUI elements)
   document.body.insertBefore(dotBg, document.body.firstChild);
@@ -170,4 +192,10 @@ export function destroyCanvasTransform(): void {
   dotBg?.remove();
   dotBg = null;
   originalBodyChildren = [];
+
+  // Restore original backgrounds
+  document.body.style.background = savedBodyBg;
+  document.documentElement.style.background = savedHtmlBg;
+  savedBodyBg = "";
+  savedHtmlBg = "";
 }
