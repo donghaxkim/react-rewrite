@@ -3,5 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "main": "src/types.ts",
-  "types": "src/types.ts"
+  "types": "src/types.ts",
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
 }

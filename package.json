@@ -2,7 +2,8 @@
   "name": "sketch-ui-monorepo",
   "private": true,
   "scripts": {
-    "build": "pnpm build:overlay && pnpm build:cli",
+    "build": "pnpm build:shared && pnpm build:overlay && pnpm build:cli",
+    "build:shared": "pnpm --filter @sketch-ui/shared build",
     "build:overlay": "pnpm --filter @sketch-ui/overlay build",
     "build:cli": "pnpm --filter sketch-ui build",
     "dev": "pnpm build:overlay && pnpm --filter sketch-ui dev",

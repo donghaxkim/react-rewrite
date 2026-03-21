@@ -122,7 +122,7 @@ export function createSketchServer(port: number): SketchServer {
           try {
             const newSource = updateClassName(
               msg.filePath, msg.lineNumber, msg.columnNumber,
-              msg.updates.map(u => ({
+              msg.updates.map((u: { tailwindPrefix: string; tailwindToken: string | null; value: string; relatedPrefixes?: string[]; classPattern?: string; standalone?: boolean }) => ({
                 tailwindPrefix: u.tailwindPrefix,
                 tailwindToken: u.tailwindToken,
                 value: u.value,
