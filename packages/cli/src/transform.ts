@@ -454,7 +454,7 @@ export function updateClassName(
             update.tailwindPrefix,
             ...(update.relatedPrefixes ?? []),
           ];
-          if (classes.some((c) => allPrefixes.some((p) => classMatchesPrefix(c, p)))) {
+          if (classes.some((c: string) => allPrefixes.some((p) => classMatchesPrefix(c, p)))) {
             hasMatch = true;
             break;
           }
