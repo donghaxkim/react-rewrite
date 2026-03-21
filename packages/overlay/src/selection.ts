@@ -7,7 +7,7 @@ import { isInternalName, isFullPageElement, isValidElement } from "./utils/compo
 import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget } from "./highlight-canvas.js";
-import { inspect, deselect as deselectProperty, cancel as cancelProperty, hasActiveOverrides } from "./properties/property-controller.js";
+import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides } from "./properties/property-controller.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -253,8 +253,18 @@ function handleMouseDown(e: MouseEvent): void {
   e.stopPropagation();
 
   if (!el || !isValidElement(el)) {
-    // Clicked on empty space or invalid element → deselect
-    clearSelection();
+    // Clicking on empty/invalid area with a selection → save changes and deselect
+    if (currentSelection) {
+      commitAndDeselect();
+      currentSelection = null;
+      selectedElement = null;
+      setSelectionTarget(null);
+      if (selectionLabel) {
+        selectionLabel.classList.remove("visible");
+        selectionLabel.style.display = "none";
+      }
+      updateComponentDetail(null);
+    }
     return;
   }
 

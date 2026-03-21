@@ -17,12 +17,15 @@ const ICONS = {
   reset: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>`,
 };
 
+const MOD_KEY = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+";
+const MOD_LABEL = navigator.platform.includes("Mac") ? "Cmd" : "Ctrl";
+
 const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: string }> = [
   { type: "pointer", icon: ICONS.pointer, label: "Pointer", shortcut: "V" },
   { type: "grab", icon: ICONS.grab, label: "Grab", shortcut: "H" },
   { type: "move", icon: ICONS.move, label: "Move", shortcut: "M" },
   { type: "draw", icon: ICONS.draw, label: "Draw", shortcut: "D" },
-  { type: "color", icon: ICONS.color, label: "Color", shortcut: "C" },
+  { type: "color", icon: ICONS.color, label: "Color", shortcut: "E" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
   { type: "lasso", icon: ICONS.lasso, label: "Lasso", shortcut: "L" },
 ];
@@ -205,6 +208,110 @@ const PANEL_STYLES = `
     background: ${COLORS.dangerSoft};
     color: ${COLORS.danger};
   }
+  .help-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: ${COLORS.textTertiary};
+    cursor: pointer;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: ${FONT_FAMILY};
+    transition: background ${TRANSITIONS.fast}, color ${TRANSITIONS.fast};
+  }
+  .help-btn:hover {
+    background: ${COLORS.bgSecondary};
+    color: ${COLORS.textPrimary};
+  }
+  .shortcuts-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 2147483647;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.4);
+    animation: fadeIn 150ms ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .shortcuts-card {
+    background: ${COLORS.bgPrimary};
+    border: 1px solid ${COLORS.border};
+    border-radius: ${RADII.lg};
+    box-shadow: ${SHADOWS.lg};
+    padding: 24px 28px;
+    min-width: 320px;
+    max-width: 420px;
+    font-family: ${FONT_FAMILY};
+    animation: cardSlide 200ms ease;
+  }
+  @keyframes cardSlide {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+  .shortcuts-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: ${COLORS.textPrimary};
+    margin: 0 0 16px 0;
+  }
+  .shortcuts-section {
+    margin-bottom: 14px;
+  }
+  .shortcuts-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: ${COLORS.textTertiary};
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 0;
+  }
+  .shortcut-action {
+    font-size: 12px;
+    color: ${COLORS.textPrimary};
+  }
+  .shortcut-keys {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+  }
+  .shortcut-key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    background: ${COLORS.bgSecondary};
+    border: 1px solid ${COLORS.border};
+    border-radius: 5px;
+    font-size: 11px;
+    font-family: ${FONT_FAMILY};
+    color: ${COLORS.textSecondary};
+    box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+  }
+  .shortcut-plus {
+    font-size: 10px;
+    color: ${COLORS.textTertiary};
+  }
 `;
 
 let panelEl: HTMLDivElement | null = null;
@@ -249,7 +356,7 @@ export function initToolsPanel(): void {
       const def = TOOL_DEFS.find(d => d.type === toolType)!;
       const btn = document.createElement("button");
       btn.className = `tool-btn${def.type === "pointer" ? " active" : ""}`;
-      btn.innerHTML = `${def.icon}<span class="tooltip">${def.label}<span class="shortcut-badge">${def.shortcut}</span></span>`;
+      btn.innerHTML = `${def.icon}<span class="tooltip">${def.label}<span class="shortcut-badge">${MOD_KEY}${def.shortcut}</span></span>`;
       btn.addEventListener("click", () => setActiveTool(def.type));
 
       // 400ms tooltip delay
@@ -292,6 +399,14 @@ export function initToolsPanel(): void {
   clearBtn.addEventListener("click", () => { if (onClearAll) onClearAll(); });
   panelEl.appendChild(clearBtn);
 
+  // Help button — shows keyboard shortcuts
+  const helpBtn = document.createElement("button");
+  helpBtn.className = "help-btn";
+  helpBtn.textContent = "?";
+  helpBtn.title = `Keyboard Shortcuts (${MOD_KEY}/)`;
+  helpBtn.addEventListener("click", () => toggleShortcutsOverlay());
+  panelEl.appendChild(helpBtn);
+
   shadowRoot.appendChild(panelEl);
   document.addEventListener("keydown", handleToolShortcut, true);
 }
@@ -301,12 +416,141 @@ function handleToolShortcut(e: KeyboardEvent): void {
   const active = document.activeElement;
   if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
 
+  // All tool shortcuts require Ctrl (Win/Linux) or Cmd (Mac)
+  if (!e.ctrlKey && !e.metaKey) return;
+
   const key = e.key.toUpperCase();
+
+  // Toggle shortcuts overlay with Ctrl/Cmd + /
+  if (e.key === "/" || e.key === "?") {
+    toggleShortcutsOverlay();
+    e.preventDefault();
+    return;
+  }
+
   const tool = TOOL_DEFS.find(d => d.shortcut === key);
   if (tool) {
     setActiveTool(tool.type);
     e.preventDefault();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Shortcuts Overlay
+// ---------------------------------------------------------------------------
+
+let shortcutsOverlayEl: HTMLDivElement | null = null;
+
+function toggleShortcutsOverlay(): void {
+  if (shortcutsOverlayEl) {
+    closeShortcutsOverlay();
+  } else {
+    openShortcutsOverlay();
+  }
+}
+
+function openShortcutsOverlay(): void {
+  const shadowRoot = getShadowRoot();
+  if (!shadowRoot || shortcutsOverlayEl) return;
+
+  shortcutsOverlayEl = document.createElement("div");
+  shortcutsOverlayEl.className = "shortcuts-overlay";
+
+  const card = document.createElement("div");
+  card.className = "shortcuts-card";
+
+  const title = document.createElement("div");
+  title.className = "shortcuts-title";
+  title.textContent = "Keyboard Shortcuts";
+  card.appendChild(title);
+
+  const sections: Array<{ label: string; items: Array<{ action: string; keys: string[] }> }> = [
+    {
+      label: "Tools",
+      items: TOOL_DEFS.map(d => ({
+        action: d.label,
+        keys: [MOD_LABEL, d.shortcut],
+      })),
+    },
+    {
+      label: "Actions",
+      items: [
+        { action: "Undo", keys: [MOD_LABEL, "Z"] },
+        { action: "Toggle Originals", keys: [MOD_LABEL, "."] },
+        { action: "Keyboard Shortcuts", keys: [MOD_LABEL, "/"] },
+        { action: "Cancel / Deselect", keys: ["Esc"] },
+      ],
+    },
+    {
+      label: "Canvas",
+      items: [
+        { action: "Pan", keys: ["Grab Tool", "Drag"] },
+        { action: "Zoom", keys: ["Scroll Wheel"] },
+      ],
+    },
+  ];
+
+  for (const section of sections) {
+    const sectionEl = document.createElement("div");
+    sectionEl.className = "shortcuts-section";
+
+    const labelEl = document.createElement("div");
+    labelEl.className = "shortcuts-section-label";
+    labelEl.textContent = section.label;
+    sectionEl.appendChild(labelEl);
+
+    for (const item of section.items) {
+      const row = document.createElement("div");
+      row.className = "shortcut-row";
+
+      const action = document.createElement("span");
+      action.className = "shortcut-action";
+      action.textContent = item.action;
+      row.appendChild(action);
+
+      const keysWrap = document.createElement("span");
+      keysWrap.className = "shortcut-keys";
+      for (let i = 0; i < item.keys.length; i++) {
+        if (i > 0) {
+          const plus = document.createElement("span");
+          plus.className = "shortcut-plus";
+          plus.textContent = "+";
+          keysWrap.appendChild(plus);
+        }
+        const key = document.createElement("span");
+        key.className = "shortcut-key";
+        key.textContent = item.keys[i];
+        keysWrap.appendChild(key);
+      }
+      row.appendChild(keysWrap);
+
+      sectionEl.appendChild(row);
+    }
+
+    card.appendChild(sectionEl);
+  }
+
+  shortcutsOverlayEl.appendChild(card);
+
+  // Close on backdrop click
+  shortcutsOverlayEl.addEventListener("click", (e) => {
+    if (e.target === shortcutsOverlayEl) closeShortcutsOverlay();
+  });
+
+  // Close on Escape
+  shortcutsOverlayEl.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeShortcutsOverlay();
+      e.stopPropagation();
+    }
+  });
+
+  shadowRoot.appendChild(shortcutsOverlayEl);
+}
+
+function closeShortcutsOverlay(): void {
+  shortcutsOverlayEl?.remove();
+  shortcutsOverlayEl = null;
 }
 
 export function updateActiveToolUI(tool: ToolType): void {
@@ -418,6 +662,7 @@ export function flashToolButton(tool: ToolType): void {
 
 export function destroyToolsPanel(): void {
   document.removeEventListener("keydown", handleToolShortcut, true);
+  closeShortcutsOverlay();
   panelEl?.remove();
   panelEl = null;
   subOptionsEl = null;
