@@ -1,6 +1,7 @@
 // packages/overlay/src/tools/grab.ts
 import type { ToolEventHandler } from "../interaction.js";
 import { setInteractionCursor } from "../interaction.js";
+import { panCanvas } from "../canvas-transform.js";
 
 let dragging = false;
 let lastX = 0;
@@ -17,7 +18,7 @@ export const grabHandler: ToolEventHandler = {
     if (!dragging) return;
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
-    window.scrollBy(-dx, -dy);
+    panCanvas(dx, dy);
     lastX = e.clientX;
     lastY = e.clientY;
   },

@@ -237,10 +237,11 @@ export function mountToolbar(onClose: () => void): void {
     if (onGenerate) onGenerate();
   });
 
-  // Keyboard shortcuts: `.` for eye toggle, Ctrl+Z for canvas undo
+  // Keyboard shortcuts: Ctrl/Cmd+. for eye toggle, Ctrl/Cmd+Z for canvas undo
   document.addEventListener("keydown", (e) => {
-    if (e.key === "." && !isTextInputFocused()) {
+    if (e.key === "." && (e.ctrlKey || e.metaKey) && !isTextInputFocused()) {
       if (onEyeToggle) onEyeToggle();
+      e.preventDefault();
     }
     // Canvas undo — callback returns true if it handled the undo, false if in Pointer mode
     if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey && !isTextInputFocused()) {

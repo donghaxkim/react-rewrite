@@ -318,9 +318,23 @@ export function cancel(): void {
 
 /**
  * Cancels pending changes, hides the sidebar, and clears all state.
+ * Used by Escape key and Clear All (revert to original).
  */
 export function deselect(): void {
   cancel();
+  destroyControls();
+  if (sidebar) {
+    sidebar.hide();
+  }
+  resetState();
+}
+
+/**
+ * Commits pending changes, hides the sidebar, and clears all state.
+ * Used when clicking outside the sidebar (click-away = confirm).
+ */
+export function commitAndDeselect(): void {
+  commit();
   destroyControls();
   if (sidebar) {
     sidebar.hide();

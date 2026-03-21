@@ -2,6 +2,7 @@
 import { getActiveTool, getToolOptions } from "./canvas-state.js";
 import { moveCursorSvg, drawCursorSvg, colorCursorSvg, lassoCursorSvg } from "./design-tokens.js";
 import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
+import { handleWheelZoom } from "./canvas-transform.js";
 
 export type ToolEventHandler = {
   onMouseDown?: (e: MouseEvent) => void | Promise<void>;
@@ -43,6 +44,18 @@ export function initInteraction(): void {
   interactionEl.addEventListener("mouseup", (e) => {
     activeHandler?.onMouseUp?.(e);
   });
+
+  // Wheel zoom for infinite canvas (works on any tool)
+  document.addEventListener("wheel", onWheel, { passive: false });
+}
+
+function onWheel(e: WheelEvent): void {
+  // Only zoom when SketchUI is active
+  if (!interactionEl) return;
+  // Skip if target is inside the SketchUI shadow DOM (sidebar scrolling, etc.)
+  const target = e.target as HTMLElement;
+  if (target?.closest?.("#sketch-ui-root")) return;
+  handleWheelZoom(e);
 }
 
 export function activateInteraction(tool: string): void {
@@ -114,6 +127,7 @@ export function getPageElementAtPoint(clientX: number, clientY: number): HTMLEle
 
 export function destroyInteraction(): void {
   document.removeEventListener("scroll", clearElementCache, true);
+  document.removeEventListener("wheel", onWheel);
   interactionEl?.remove();
   interactionEl = null;
   activeHandler = null;

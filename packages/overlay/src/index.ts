@@ -24,6 +24,7 @@ import { drawHandler } from "./tools/draw.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { colorHandler, cleanupColorTool } from "./tools/color.js";
 import { lassoHandler, clearLassoSelection } from "./tools/lasso.js";
+import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 
 declare global {
   interface Window {
@@ -49,6 +50,9 @@ function init(): void {
   if (shadowRoot) {
     initPropertyController(shadowRoot);
   }
+
+  // Infinite canvas (wraps page content before other layers init)
+  initCanvasTransform();
 
   // Phase 1 systems
   initSelection();
@@ -136,6 +140,7 @@ function init(): void {
     clearAnnotationLayer();
     clearLassoSelection();
     resetCanvas();
+    resetCanvasTransform();
     showToast("Canvas cleared");
   });
 
@@ -153,6 +158,7 @@ function close(): void {
   destroyToolsPanel();
   destroyInteraction();
   resetCanvas();
+  destroyCanvasTransform();
   disconnect();
   destroyToolbar();
 }

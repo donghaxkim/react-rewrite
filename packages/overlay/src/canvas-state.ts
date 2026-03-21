@@ -36,6 +36,15 @@ let toolOptions = {
   textColor: "#ffffff",
 };
 
+// --- Canvas Transform (infinite canvas zoom/pan) ---
+
+let canvasScale = 1;
+let canvasOffsetX = 0;
+let canvasOffsetY = 0;
+
+type CanvasTransformListener = () => void;
+let canvasTransformListeners: CanvasTransformListener[] = [];
+
 type ToolChangeListener = (tool: ToolType, prev: ToolType) => void;
 type StateChangeListener = () => void;
 let toolChangeListeners: ToolChangeListener[] = [];
@@ -197,6 +206,40 @@ export function peekUndoStack(): CanvasUndoAction | null {
   return undoStack.length > 0 ? undoStack[undoStack.length - 1] : null;
 }
 
+// --- Canvas Transform ---
+
+export function getCanvasTransform(): { scale: number; offsetX: number; offsetY: number } {
+  return { scale: canvasScale, offsetX: canvasOffsetX, offsetY: canvasOffsetY };
+}
+
+export function setCanvasTransform(scale: number, offsetX: number, offsetY: number): void {
+  canvasScale = scale;
+  canvasOffsetX = offsetX;
+  canvasOffsetY = offsetY;
+  canvasTransformListeners.forEach(fn => fn());
+}
+
+export function onCanvasTransformChange(fn: CanvasTransformListener): () => void {
+  canvasTransformListeners.push(fn);
+  return () => { canvasTransformListeners = canvasTransformListeners.filter(f => f !== fn); };
+}
+
+/** Convert viewport (mouse) coordinates to page coordinates, accounting for canvas transform */
+export function viewportToPage(clientX: number, clientY: number): { x: number; y: number } {
+  return {
+    x: (clientX - canvasOffsetX) / canvasScale,
+    y: (clientY - canvasOffsetY) / canvasScale,
+  };
+}
+
+/** Convert page coordinates to viewport (screen) coordinates */
+export function pageToViewport(pageX: number, pageY: number): { x: number; y: number } {
+  return {
+    x: pageX * canvasScale + canvasOffsetX,
+    y: pageY * canvasScale + canvasOffsetY,
+  };
+}
+
 // --- Reset ---
 
 export function resetCanvas(): void {
@@ -229,6 +272,10 @@ export function resetCanvas(): void {
   annotations = [];
   undoStack = [];
   originalsHidden = false;
+  canvasScale = 1;
+  canvasOffsetX = 0;
+  canvasOffsetY = 0;
+  canvasTransformListeners.forEach(fn => fn());
   notifyStateChange();
 }
 
