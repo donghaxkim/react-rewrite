@@ -9,7 +9,37 @@ export type ClientMessage =
     }
   | { type: "getSiblings"; filePath: string; parentLine: number }
   | { type: "undo" }
-  | { type: "ping" };
+  | { type: "ping" }
+  | {
+      type: "updateProperty";
+      filePath: string;
+      lineNumber: number;
+      columnNumber: number;
+      property: string;
+      cssProperty: string;
+      value: string;
+      tailwindPrefix: string;
+      tailwindToken: string | null;
+      relatedPrefixes?: string[];
+      originalValue: string;
+      framework: "tailwind";
+    }
+  | {
+      type: "updateProperties";
+      filePath: string;
+      lineNumber: number;
+      columnNumber: number;
+      updates: Array<{
+        property: string;
+        cssProperty: string;
+        value: string;
+        tailwindPrefix: string;
+        tailwindToken: string | null;
+        relatedPrefixes?: string[];
+        originalValue: string;
+      }>;
+      framework: "tailwind";
+    };
 
 export type ServerMessage =
   | { type: "reorderComplete"; success: boolean; error?: string }
@@ -20,7 +50,14 @@ export type ServerMessage =
   | { type: "undoComplete"; success: boolean; error?: string }
   | { type: "devServerDisconnected" }
   | { type: "devServerReconnected" }
-  | { type: "pong" };
+  | { type: "pong" }
+  | {
+      type: "updatePropertyComplete";
+      success: boolean;
+      error?: string;
+      errorCode?: TransformErrorCode;
+    }
+  | { type: "tailwindTokens"; tokens: TailwindTokenMap };
 
 export interface ComponentInfo {
   tagName: string;
@@ -51,6 +88,77 @@ export interface UndoEntry {
 export interface SiblingInfo {
   componentName: string;
   lineNumber: number;
+}
+
+// --- Property Inspector Types ---
+
+export type ControlType = "number-scrub" | "segmented" | "color-swatch" | "slider" | "box-model";
+export type PropertyGroup = "layout" | "spacing" | "size" | "typography" | "background" | "border" | "effects";
+
+export interface PropertyDescriptor {
+  key: string;
+  label: string;
+  group: PropertyGroup;
+  controlType: ControlType;
+  cssProperty: string;
+  tailwindPrefix: string;
+  tailwindScale: string;
+  relatedPrefixes?: string[];
+  defaultValue: string;
+  enumValues?: EnumOption[];
+  min?: number;
+  max?: number;
+  compound?: boolean;
+  compoundGroup?: string;
+  /** When true, the Tailwind class is a standalone utility (e.g. "flex", "block")
+   *  not a prefix-value pair. The tailwindValue from enumValues IS the full class name. */
+  standalone?: boolean;
+  /** Regex pattern to match this property's Tailwind classes. Resolves prefix collisions
+   *  (e.g. "text" is used by fontSize, textAlign, and color). If not provided,
+   *  defaults to matching `tailwindPrefix-*`. */
+  classPattern?: string;
+}
+
+export interface EnumOption {
+  value: string;
+  tailwindValue: string;
+  icon?: string;
+  label: string;
+}
+
+export interface TailwindTokenMap {
+  spacing: Record<string, string>;
+  colors: Record<string, string>;
+  fontSize: Record<string, string>;
+  fontWeight: Record<string, string>;
+  borderRadius: Record<string, string>;
+  borderWidth: Record<string, string>;
+  opacity: Record<string, string>;
+  letterSpacing: Record<string, string>;
+  lineHeight: Record<string, string>;
+  spacingReverse: Record<string, string>;
+  colorsReverse: Record<string, string>;
+  fontSizeReverse: Record<string, string>;
+  fontWeightReverse: Record<string, string>;
+  borderRadiusReverse: Record<string, string>;
+  borderWidthReverse: Record<string, string>;
+  opacityReverse: Record<string, string>;
+  letterSpacingReverse: Record<string, string>;
+  lineHeightReverse: Record<string, string>;
+}
+
+export type TransformErrorCode =
+  | "DYNAMIC_CLASSNAME"
+  | "FILE_CHANGED"
+  | "MAPPED_ELEMENT"
+  | "CONFLICTING_CLASS";
+
+export interface ElementIdentity {
+  componentName: string;
+  filePath: string;
+  lineNumber: number;
+  columnNumber: number;
+  tagName: string;
 }
 
 export interface DetectionResult {
@@ -105,7 +213,12 @@ export type CanvasUndoAction =
   | { type: "ghostCreate"; ghostId: string }
   | { type: "ghostMove"; ghostId: string; previousPos: { x: number; y: number } }
   | { type: "annotationAdd"; annotationId: string }
-  | { type: "colorChange"; annotationId: string; property: string; previousColor: string };
+  | { type: "colorChange"; annotationId: string; property: string; previousColor: string }
+  | {
+      type: "propertyChange";
+      elementIdentity: ElementIdentity;
+      overrides: Array<{ cssProperty: string; previousValue: string; newValue: string }>;
+    };
 
 export interface SerializedAnnotations {
   moves: Array<{
