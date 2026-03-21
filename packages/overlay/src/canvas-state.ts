@@ -139,6 +139,8 @@ export function setOriginalsHidden(hidden: boolean): void {
 export function hasGhostForElement(el: HTMLElement): boolean {
   for (const ghost of ghosts.values()) {
     if (ghost.originalEl === el) return true;
+    // Prevent nested ghost: el is inside an existing ghost's original, or vice versa
+    if (ghost.originalEl.contains(el) || el.contains(ghost.originalEl)) return true;
   }
   return false;
 }
