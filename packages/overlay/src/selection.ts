@@ -245,10 +245,13 @@ function handleMouseDown(e: MouseEvent): void {
   // Cmd+click (Mac) or Ctrl+click (Win/Linux) → let browser handle (follow links, etc.)
   if (e.metaKey || e.ctrlKey) return;
 
+  // Ignore clicks on the overlay's own UI (sidebar, toolbar, etc.)
+  const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+  if (el?.closest("#sketch-ui-root")) return;
+
   e.preventDefault();
   e.stopPropagation();
 
-  const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
   if (!el || !isValidElement(el)) {
     // Clicked on empty space or invalid element → deselect
     clearSelection();
