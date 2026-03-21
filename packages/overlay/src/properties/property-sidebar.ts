@@ -194,9 +194,11 @@ export function createSidebar(shadowRoot: ShadowRoot): {
   resizeHandle.addEventListener("pointerup", endResize);
   resizeHandle.addEventListener("pointercancel", endResize);
 
-  // Prevent sidebar clicks from propagating to interaction layer
+  // Prevent sidebar events from propagating to interaction layer
   sidebar.addEventListener("pointerdown", (e) => e.stopPropagation());
+  sidebar.addEventListener("mousedown", (e) => e.stopPropagation());
   sidebar.addEventListener("click", (e) => e.stopPropagation());
+  sidebar.addEventListener("mouseup", (e) => e.stopPropagation());
 
   // --- Public methods ---
 
