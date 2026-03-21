@@ -38,11 +38,11 @@ export const moveHandler: ToolEventHandler = {
     const el = getSelectedElement();
     if (!el) return;
 
-    // Prevent creating duplicate ghosts for the same element
+    // Prevent creating duplicate or nested ghosts for the same element
     if (hasGhostForElement(el)) {
-      // Find the existing ghost and drag it instead
+      // Find the existing ghost (exact match, parent, or child) and drag it instead
       for (const ghost of getGhosts().values()) {
-        if (ghost.originalEl === el) {
+        if (ghost.originalEl === el || ghost.originalEl.contains(el) || el.contains(ghost.originalEl)) {
           dragTarget = ghost;
           dragOffset = {
             x: e.clientX + window.scrollX - ghost.currentPos.x,

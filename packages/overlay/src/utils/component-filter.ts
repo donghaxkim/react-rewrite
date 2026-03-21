@@ -89,6 +89,7 @@ function isFullViewportOverlay(el: Element, style: CSSStyleDeclaration): boolean
 export function isValidElement(el: Element): boolean {
   const tag = el instanceof HTMLElement ? el.tagName.toLowerCase() : "";
   if (tag === "html" || tag === "body") return false;
+  if (el instanceof HTMLElement && isFullPageElement(el)) return false;
 
   if (el.closest("#sketch-ui-root")) return false;
   if (el instanceof HTMLElement && el.hasAttribute("data-sketch-ui-interaction")) return false;
