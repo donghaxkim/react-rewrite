@@ -241,6 +241,10 @@ export function initSelection(): void {
 
 function handleMouseDown(e: MouseEvent): void {
   if (!isActive) return;
+
+  // Cmd+click (Mac) or Ctrl+click (Win/Linux) → let browser handle (follow links, etc.)
+  if (e.metaKey || e.ctrlKey) return;
+
   e.preventDefault();
   e.stopPropagation();
 

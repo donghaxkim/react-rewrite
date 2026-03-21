@@ -50,6 +50,7 @@ export function createBoxModel(
     font-family:${FONT_FAMILY};
     font-size:10px;
     color:${COLORS.textSecondary};
+    position:relative;
   `.trim().replace(/\n\s*/g, " ");
 
   // -----------------------------------------------------------------------
