@@ -1,6 +1,6 @@
 // packages/overlay/src/tools/text.ts
 import type { ToolEventHandler } from "../interaction.js";
-import type { ComponentRef } from "@sketch-ui/shared";
+import type { ComponentRef } from "@frameup/shared";
 import { getToolOptions, addAnnotation, viewportToPage } from "../canvas-state.js";
 import { addTextAnnotation } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
@@ -41,7 +41,7 @@ export const textHandler: ToolEventHandler = {
       box-shadow: 0 0 0 3px ${COLORS.accentSoft};
     `;
 
-    activeInput.setAttribute("data-sketch-ui-ghost", "true");
+    activeInput.setAttribute("data-frameup-ghost", "true");
     activeInput.addEventListener("keydown", (ke) => {
       if (ke.key === "Enter") { commitText(); ke.preventDefault(); }
       if (ke.key === "Escape") { cancelText(); ke.preventDefault(); }

@@ -1,8 +1,8 @@
-# CLAUDE.md — SketchUI Project
+# CLAUDE.md — FrameUp Project
 
 ## Project Overview
 
-SketchUI is a CLI tool that overlays on running React dev servers, enabling visual component selection, drag-to-reorder (writes to source JSX), and a Figma-style visual canvas with drawing, color, text, move, lasso tools. Built as a pnpm monorepo.
+FrameUp (npm: `frameup`) is a CLI tool that overlays on running React dev servers, enabling visual component selection, drag-to-reorder (writes to source JSX), and a Figma-style visual canvas with drawing, color, text, move, lasso tools. Built as a pnpm monorepo.
 
 ### Architecture
 
@@ -20,8 +20,8 @@ pnpm dev
 # From root: build overlay + start CLI in watch mode
 pnpm dev
 
-# From test-app/: launch SketchUI against running app
-node ../packages/cli/bin/sketch-ui.js 3000
+# From test-app/: launch FrameUp against running app
+node ../packages/cli/bin/frameup.js 3000
 
 # Full build
 pnpm build
@@ -35,7 +35,7 @@ npx vitest run packages/overlay/src/utils/color-math.test.ts  # Color math tests
 ### Key Design Decisions
 
 - Overlay is an IIFE bundle (tsup), injected via reverse proxy — no modifications to user's app
-- All UI lives in Shadow DOM (`#sketch-ui-root`) for style isolation
+- All UI lives in Shadow DOM (`#frameup-root`) for style isolation
 - bippy library for React Fiber traversal (component resolution)
 - Uses `getOwnerStack` (React 19) with fiber walk fallback (React 18)
 - Canvas state is centralized in `canvas-state.ts` with listener pattern

@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import jscodeshift from "jscodeshift";
-import type { SiblingInfo } from "@sketch-ui/shared";
+import type { SiblingInfo } from "@frameup/shared";
 import { detectQuoteStyle } from "./utils.js";
 
 export function getParser(filePath: string): string {

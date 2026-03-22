@@ -20,7 +20,7 @@ export function registerToolHandler(tool: string, handler: ToolEventHandler): vo
 
 export function initInteraction(): void {
   interactionEl = document.createElement("div");
-  interactionEl.setAttribute("data-sketch-ui-interaction", "true");
+  interactionEl.setAttribute("data-frameup-interaction", "true");
   interactionEl.style.cssText = `
     position: fixed;
     top: 0;
@@ -54,7 +54,7 @@ function onWheel(e: WheelEvent): void {
   // Only zoom on Ctrl/Cmd+scroll (standard pinch-to-zoom). Regular scroll passes through.
   if (!e.ctrlKey && !e.metaKey) return;
   const target = e.target as HTMLElement;
-  if (target?.closest?.("#sketch-ui-root")) return;
+  if (target?.closest?.("#frameup-root")) return;
   handleWheelZoom(e);
 }
 
@@ -98,7 +98,7 @@ export function setInteractionPointerEvents(enabled: boolean): void {
 }
 
 /**
- * Find the actual page element at a viewport point, looking through all SketchUI layers.
+ * Find the actual page element at a viewport point, looking through all FrameUp layers.
  * Uses elementsFromPoint to skip the interaction layer, shadow DOM host, and ghost elements.
  */
 export function getPageElementAtPoint(clientX: number, clientY: number): HTMLElement | null {
@@ -111,9 +111,9 @@ export function getPageElementAtPoint(clientX: number, clientY: number): HTMLEle
 
   for (const el of elements) {
     if (!(el instanceof HTMLElement)) continue;
-    if (el.closest("#sketch-ui-root")) continue;
-    if (el.hasAttribute("data-sketch-ui-interaction")) continue;
-    if (el.hasAttribute("data-sketch-ui-ghost")) continue;
+    if (el.closest("#frameup-root")) continue;
+    if (el.hasAttribute("data-frameup-interaction")) continue;
+    if (el.hasAttribute("data-frameup-ghost")) continue;
     if (el === document.body || el === document.documentElement) continue;
     result = el;
     break;

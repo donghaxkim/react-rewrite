@@ -2,7 +2,7 @@
 import type {
   ToolType, Annotation, DrawAnnotation, TextAnnotation, ColorOverride,
   ComponentRef, CanvasUndoAction, SerializedAnnotations,
-} from "@sketch-ui/shared";
+} from "@frameup/shared";
 
 export interface GhostEntry {
   id: string;

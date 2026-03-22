@@ -1,4 +1,4 @@
-import type { PropertyDescriptor, PropertyGroup } from "@sketch-ui/shared";
+import type { PropertyDescriptor, PropertyGroup } from "@frameup/shared";
 import type { PropertyControl, OnPreview, OnCommit } from "./controls/types.js";
 import { createNumberScrub } from "./controls/number-scrub.js";
 import { createSegmented } from "./controls/segmented.js";

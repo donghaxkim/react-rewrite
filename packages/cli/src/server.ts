@@ -7,7 +7,7 @@ import type {
   ServerMessage,
   UndoEntry,
   TransformErrorCode,
-} from "@sketch-ui/shared";
+} from "@frameup/shared";
 import { reorderComponent, getSiblings } from "./transform.js";
 import { updateClassName } from "./transform.js";
 import { resolveTailwindConfig } from "./tailwind-resolver.js";
@@ -69,7 +69,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
       switch (msg.type) {
         case "reorder": {
           if (!isPathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[SketchUI] Blocked path traversal attempt: ${msg.filePath}`);
+            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "reorderComplete", success: false, error: "File path is outside the project root" });
             break;
           }
@@ -117,7 +117,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "updateProperty": {
           if (!isPathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[SketchUI] Blocked path traversal attempt: ${msg.filePath}`);
+            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
             break;
           }
@@ -149,7 +149,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "updateProperties": {
           if (!isPathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[SketchUI] Blocked path traversal attempt: ${msg.filePath}`);
+            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
             break;
           }
@@ -203,7 +203,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
       const config = resolveTailwindConfig(projectRoot);
       send(ws, { type: "tailwindTokens", tokens: config.tokens });
     } catch (err) {
-      console.warn("[SketchUI] Could not resolve Tailwind config:", err);
+      console.warn("[FrameUp] Could not resolve Tailwind config:", err);
     }
 
     ws.on("message", (data) => {
@@ -222,7 +222,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "getSiblings":
           // Can run concurrently (read-only)
           if (!isPathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[SketchUI] Blocked path traversal attempt: ${msg.filePath}`);
+            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "siblingsList", siblings: [] });
             break;
           }

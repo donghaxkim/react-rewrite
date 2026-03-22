@@ -28,7 +28,7 @@ const TOOLBAR_STYLES = `
   .toolbar {
     position: fixed;
     bottom: 16px;
-    right: 16px;
+    left: 76px;
     z-index: 2147483647;
     display: flex;
     align-items: center;
@@ -145,7 +145,7 @@ const TOOLBAR_STYLES = `
   .toast {
     position: fixed;
     bottom: 68px;
-    right: 16px;
+    left: 76px;
     background: ${COLORS.bgPrimary};
     border: 1px solid ${COLORS.border};
     color: ${COLORS.textPrimary};
@@ -176,7 +176,7 @@ const TOOLBAR_STYLES = `
 
 export function mountToolbar(onClose: () => void): void {
   const host = document.createElement("div");
-  host.id = "sketch-ui-root";
+  host.id = "frameup-root";
   document.body.appendChild(host);
 
   shadowRoot = host.attachShadow({ mode: "open" });
@@ -197,8 +197,8 @@ export function mountToolbar(onClose: () => void): void {
       ${UNDO_SVG}
     </button>
     <span class="divider"></span>
-    <button class="generate-btn" disabled>Generate</button>
-    <button class="icon-btn close-btn" title="Close SketchUI">
+    <button class="generate-btn" disabled>Confirm</button>
+    <button class="icon-btn close-btn" title="Close FrameUp">
       ${CLOSE_SVG}
     </button>
   `;
@@ -316,7 +316,7 @@ export function mountToolbar(onClose: () => void): void {
 
 
 export function destroyToolbar(): void {
-  const host = document.getElementById("sketch-ui-root");
+  const host = document.getElementById("frameup-root");
   if (host) host.remove();
   shadowRoot = null;
   undoBtn = null;

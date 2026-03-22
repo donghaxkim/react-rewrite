@@ -1,5 +1,5 @@
 // packages/overlay/src/tools-panel.ts
-import type { ToolType } from "@sketch-ui/shared";
+import type { ToolType } from "@frameup/shared";
 import { getActiveTool, setActiveTool, getToolOptions, setToolOption } from "./canvas-state.js";
 import { getShadowRoot } from "./toolbar.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
@@ -23,8 +23,8 @@ const MOD_LABEL = navigator.platform.includes("Mac") ? "Cmd" : "Ctrl";
 
 const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: string }> = [
   { type: "pointer", icon: ICONS.pointer, label: "Pointer", shortcut: "V" },
-  { type: "grab", icon: ICONS.grab, label: "Grab", shortcut: "H" },
-  { type: "move", icon: ICONS.move, label: "Move", shortcut: "M" },
+  { type: "grab", icon: ICONS.grab, label: "Grab", shortcut: "G" },
+  { type: "move", icon: ICONS.move, label: "Move", shortcut: "J" },
   { type: "draw", icon: ICONS.draw, label: "Draw", shortcut: "D" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
 ];

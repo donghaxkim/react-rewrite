@@ -17,7 +17,7 @@
 //
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
-import type { ComponentInfo } from "@sketch-ui/shared";
+import type { ComponentInfo } from "@frameup/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { getElementsInArea } from "./utils/area-selection.js";
@@ -92,7 +92,7 @@ async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedCom
       }
     }
   } catch (err) {
-    console.warn("[SketchUI] getOwnerStack failed, falling back to fiber walk:", err);
+    console.warn("[FrameUp] getOwnerStack failed, falling back to fiber walk:", err);
   }
 
   // Fallback: synchronous fiber walk (works when owner stacks aren't available)
@@ -285,7 +285,7 @@ function handleMouseDown(e: MouseEvent): void {
 
   // Ignore clicks on the overlay's own UI (sidebar, toolbar, etc.)
   const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-  if (el?.closest("#sketch-ui-root")) return;
+  if (el?.closest("#frameup-root")) return;
 
   // Check if clicking on a resize corner handle (works for both single and multi-select)
   const hasSelection = currentSelection || multiSelected.size > 0;
@@ -539,7 +539,7 @@ async function selectElement(el: HTMLElement, options?: { skipSidebar?: boolean 
     hideHoverOverlay();
 
     const resolved = await resolveComponentFromElement(el);
-    console.log("[SketchUI] selectElement:", el.tagName, "→", resolved?.componentName, resolved?.filePath, "stack:", resolved?.stack?.map(s => s.componentName));
+    console.log("[FrameUp] selectElement:", el.tagName, "→", resolved?.componentName, resolved?.filePath, "stack:", resolved?.stack?.map(s => s.componentName));
     if (!resolved) return;
 
     currentSelection = {
@@ -575,7 +575,7 @@ async function selectElement(el: HTMLElement, options?: { skipSidebar?: boolean 
       lineNumber: resolved.lineNumber,
     });
   } catch (err) {
-    console.error("[SketchUI] selectElement error:", err);
+    console.error("[FrameUp] selectElement error:", err);
   }
 }
 

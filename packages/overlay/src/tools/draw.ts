@@ -1,6 +1,6 @@
 // packages/overlay/src/tools/draw.ts
 import type { ToolEventHandler } from "../interaction.js";
-import type { DrawAnnotation } from "@sketch-ui/shared";
+import type { DrawAnnotation } from "@frameup/shared";
 import { getToolOptions, addAnnotation, viewportToPage } from "../canvas-state.js";
 import { createLivePath, addStrokePath } from "../annotation-layer.js";
 import { simplifyPoints } from "../utils/rdp.js";

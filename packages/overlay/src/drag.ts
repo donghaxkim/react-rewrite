@@ -1,6 +1,6 @@
 // packages/overlay/src/drag.ts
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
-import type { ComponentInfo, SiblingInfo } from "@sketch-ui/shared";
+import type { ComponentInfo, SiblingInfo } from "@frameup/shared";
 import { send, onMessage } from "./bridge.js";
 import { clearSelection, setDragCallbacks } from "./selection.js";
 import { getShadowRoot } from "./toolbar.js";
@@ -123,7 +123,7 @@ function handleDragStart(e: MouseEvent, el: HTMLElement, selection: ComponentInf
     // Match siblings to DOM elements using bippy fiber walking
     const allElements = document.querySelectorAll("*");
     for (const sibEl of allElements) {
-      if (sibEl.closest("#sketch-ui-root")) continue;
+      if (sibEl.closest("#frameup-root")) continue;
       const fiber = getFiberFromHostInstance(sibEl);
       if (!fiber) continue;
 

@@ -1,4 +1,4 @@
-import type { PropertyDescriptor } from "@sketch-ui/shared";
+import type { PropertyDescriptor } from "@frameup/shared";
 
 export interface PropertyControl {
   /** The DOM element to mount in the sidebar */

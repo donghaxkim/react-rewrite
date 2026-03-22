@@ -1,4 +1,4 @@
-import type { PropertyDescriptor } from "@sketch-ui/shared";
+import type { PropertyDescriptor } from "@frameup/shared";
 import type { PropertyControl, OnPreview, OnCommit } from "./types.js";
 import { getSnapPoints } from "../tailwind-resolver.js";
 import { COLORS, FONT_FAMILY } from "../../design-tokens.js";

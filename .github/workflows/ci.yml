@@ -10,16 +10,20 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.32
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
@@ -30,6 +34,4 @@ jobs:
       - name: Test
         run: |
           pnpm test
-          npx vitest run packages/overlay/src/__tests__/rdp.test.ts
-          npx vitest run packages/overlay/src/utils/color-math.test.ts
-          npx vitest run packages/overlay/src/properties/__tests__/tailwind-resolver.test.ts
+          pnpm --filter @frameup/overlay exec vitest run

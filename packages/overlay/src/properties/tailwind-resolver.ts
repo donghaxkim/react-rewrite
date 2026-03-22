@@ -1,4 +1,4 @@
-import type { TailwindTokenMap } from "@sketch-ui/shared";
+import type { TailwindTokenMap } from "@frameup/shared";
 
 // ---------------------------------------------------------------------------
 // Types

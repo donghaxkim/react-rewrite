@@ -8,3 +8,5 @@ packages/overlay/dist/*
 .worktrees/
 .env
 .env.local
+package-lock.json
+.playwright-mcp/

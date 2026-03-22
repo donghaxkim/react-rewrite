@@ -9,7 +9,7 @@ import { createSketchServer } from "./server.js";
 import { getAvailablePort } from "./utils.js";
 
 program
-  .name("sketch-ui")
+  .name("frameup")
   .description("Visual overlay for React dev servers")
   .argument("[port]", "Dev server port override")
   .option("--no-open", "Don't open browser automatically")
@@ -20,7 +20,7 @@ program
       const opts = program.opts();
       const host = opts.host || "localhost";
 
-      console.log(chalk.cyan("\n  SketchUI") + chalk.dim(" — Phase 1\n"));
+      console.log(chalk.cyan("\n  FrameUp") + chalk.dim(" — React visual overlay\n"));
 
       // Detect framework
       const detection = await detect();

@@ -1,5 +1,5 @@
 // packages/overlay/src/ghost-layer.ts
-import type { ComponentRef } from "@sketch-ui/shared";
+import type { ComponentRef } from "@frameup/shared";
 import { addGhost, removeGhost, getGhosts, getOriginalsHidden, type GhostEntry } from "./canvas-state.js";
 import { getCanvasTransform } from "./canvas-state.js";
 import { getCanvasWrapper, onCanvasWrapperChange } from "./canvas-transform.js";
@@ -48,7 +48,7 @@ export function createGhost(
   const { scale, offsetX, offsetY } = getCanvasTransform();
   const cloneEl = originalEl.cloneNode(true) as HTMLElement;
 
-  cloneEl.setAttribute("data-sketch-ui-ghost", "true");
+  cloneEl.setAttribute("data-frameup-ghost", "true");
   // Store dimensions at original (unscaled) size
   cloneEl.style.width = `${rect.width / scale}px`;
   cloneEl.style.height = `${rect.height / scale}px`;

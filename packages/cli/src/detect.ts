@@ -1,7 +1,7 @@
 // packages/cli/src/detect.ts
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { DetectionResult } from "@sketch-ui/shared";
+import type { DetectionResult } from "@frameup/shared";
 
 export async function detect(cwd?: string): Promise<DetectionResult> {
   const projectRoot = cwd || process.cwd();
@@ -10,7 +10,7 @@ export async function detect(cwd?: string): Promise<DetectionResult> {
   const pkgJsonPath = path.join(projectRoot, "package.json");
   if (!fs.existsSync(pkgJsonPath)) {
     throw new Error(
-      "No package.json found. Run sketch-ui from your project root."
+      "No package.json found. Run frameup from your project root."
     );
   }
 
@@ -22,14 +22,14 @@ export async function detect(cwd?: string): Promise<DetectionResult> {
 
   if (!allDeps["react"]) {
     throw new Error(
-      "React not found in dependencies. SketchUI requires a React project."
+      "React not found in dependencies. FrameUp requires a React project."
     );
   }
 
   // Check for development mode
   if (process.env.NODE_ENV === "production") {
     throw new Error(
-      "SketchUI requires development mode. React Fiber debug info is not available in production builds."
+      "FrameUp requires development mode. React Fiber debug info is not available in production builds."
     );
   }
 
@@ -58,7 +58,7 @@ export async function detect(cwd?: string): Promise<DetectionResult> {
   }
 
   throw new Error(
-    "Could not detect framework. SketchUI supports Next.js, Vite, and Create React App."
+    "Could not detect framework. FrameUp supports Next.js, Vite, and Create React App."
   );
 }
 
@@ -82,6 +82,6 @@ export async function healthCheck(port: number, host: string = "localhost"): Pro
   }
 
   throw new Error(
-    `No dev server found on ${host}:${port}. Start your dev server first, then run sketch-ui.`
+    `No dev server found on ${host}:${port}. Start your dev server first, then run frameup.`
   );
 }

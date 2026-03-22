@@ -1,5 +1,5 @@
 // packages/overlay/src/bridge.ts
-import type { ClientMessage, ServerMessage } from "@sketch-ui/shared";
+import type { ClientMessage, ServerMessage } from "@frameup/shared";
 import { setCliTokens } from "./properties/tailwind-resolver.js";
 
 type MessageHandler = (msg: ServerMessage) => void;

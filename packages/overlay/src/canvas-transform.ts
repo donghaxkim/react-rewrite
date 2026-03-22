@@ -62,7 +62,7 @@ export function initCanvasTransform(): void {
 
   // Create the wrapper that will hold page content
   wrapper = document.createElement("div");
-  wrapper.setAttribute("data-sketch-ui-canvas-wrapper", "true");
+  wrapper.setAttribute("data-frameup-canvas-wrapper", "true");
   wrapper.style.cssText = `
     transform-origin: 0 0;
     min-width: 100vw;
@@ -73,7 +73,7 @@ export function initCanvasTransform(): void {
 
   // Create dotted background (sits behind wrapper, covers viewport)
   dotBg = document.createElement("div");
-  dotBg.setAttribute("data-sketch-ui-dot-bg", "true");
+  dotBg.setAttribute("data-frameup-dot-bg", "true");
   dotBg.style.cssText = `
     position: fixed;
     top: 0;
@@ -85,18 +85,18 @@ export function initCanvasTransform(): void {
     background-color: ${COLORS.bgSecondary};
   `.trim().replace(/\n\s*/g, " ");
 
-  // Move all non-SketchUI body children into the wrapper
+  // Move all non-FrameUp body children into the wrapper
   const bodyChildren = Array.from(document.body.childNodes);
   for (const child of bodyChildren) {
     if (child instanceof HTMLElement) {
-      // Skip SketchUI elements
+      // Skip FrameUp elements
       if (
-        child.id === "sketch-ui-root" ||
-        child.hasAttribute("data-sketch-ui-interaction") ||
-        child.hasAttribute("data-sketch-ui-ghost") ||
-        child.hasAttribute("data-sketch-ui-annotation") ||
-        child.hasAttribute("data-sketch-ui-dot-bg") ||
-        child.hasAttribute("data-sketch-ui-canvas-wrapper")
+        child.id === "frameup-root" ||
+        child.hasAttribute("data-frameup-interaction") ||
+        child.hasAttribute("data-frameup-ghost") ||
+        child.hasAttribute("data-frameup-annotation") ||
+        child.hasAttribute("data-frameup-dot-bg") ||
+        child.hasAttribute("data-frameup-canvas-wrapper")
       ) {
         continue;
       }
@@ -109,7 +109,7 @@ export function initCanvasTransform(): void {
   wrapper.style.position = "relative";
   wrapper.style.zIndex = "1";
 
-  // Insert bg and wrapper into body (before SketchUI elements)
+  // Insert bg and wrapper into body (before FrameUp elements)
   document.body.insertBefore(dotBg, document.body.firstChild);
   document.body.insertBefore(wrapper, dotBg.nextSibling);
 

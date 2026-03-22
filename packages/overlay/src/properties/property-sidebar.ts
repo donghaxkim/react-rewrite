@@ -7,7 +7,7 @@ import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "../design-toke
 const DEFAULT_WIDTH = 300;
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 380;
-const STORAGE_KEY = "sketch-ui-sidebar-width";
+const STORAGE_KEY = "frameup-sidebar-width";
 const RESIZE_HANDLE_WIDTH = 4;
 
 // ---------------------------------------------------------------------------

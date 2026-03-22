@@ -1,15 +1,21 @@
 {
-  "name": "sketch-ui-monorepo",
+  "name": "frameup-monorepo",
   "private": true,
   "scripts": {
     "build": "pnpm build:shared && pnpm build:overlay && pnpm build:cli",
-    "build:shared": "pnpm --filter @sketch-ui/shared build",
-    "build:overlay": "pnpm --filter @sketch-ui/overlay build",
-    "build:cli": "pnpm --filter sketch-ui build",
-    "dev": "pnpm build:overlay && pnpm --filter sketch-ui dev",
-    "test": "pnpm --filter sketch-ui test"
+    "build:shared": "pnpm --filter @frameup/shared build",
+    "build:overlay": "pnpm --filter @frameup/overlay build",
+    "build:cli": "pnpm --filter frameup build",
+    "dev": "pnpm build:overlay && pnpm --filter frameup dev",
+    "test": "pnpm --filter frameup test",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0"
   }
 }

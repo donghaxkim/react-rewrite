@@ -67,7 +67,7 @@ export function initHighlightCanvas(): void {
   if (!shadowRoot) return;
 
   canvas = document.createElement("canvas");
-  canvas.setAttribute("data-sketch-ui-ghost", "true");
+  canvas.setAttribute("data-frameup-ghost", "true");
   canvas.style.cssText = `
     position: fixed;
     top: 0;

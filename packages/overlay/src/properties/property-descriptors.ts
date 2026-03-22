@@ -1,4 +1,4 @@
-import type { PropertyDescriptor } from "@sketch-ui/shared";
+import type { PropertyDescriptor } from "@frameup/shared";
 
 // --- Layout ---
 export const LAYOUT_DESCRIPTORS: PropertyDescriptor[] = [

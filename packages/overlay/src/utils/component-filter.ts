@@ -84,16 +84,16 @@ function isFullViewportOverlay(el: Element, style: CSSStyleDeclaration): boolean
 
 /**
  * Validates whether an element is a valid selection/hover target.
- * Ported from react-grab's isValidGrabbableElement with adaptations for SketchUI.
+ * Ported from react-grab's isValidGrabbableElement with adaptations for FrameUp.
  */
 export function isValidElement(el: Element): boolean {
   const tag = el instanceof HTMLElement ? el.tagName.toLowerCase() : "";
   if (tag === "html" || tag === "body") return false;
   if (el instanceof HTMLElement && isFullPageElement(el)) return false;
 
-  if (el.closest("#sketch-ui-root")) return false;
-  if (el instanceof HTMLElement && el.hasAttribute("data-sketch-ui-interaction")) return false;
-  if (el instanceof HTMLElement && el.hasAttribute("data-sketch-ui-ghost")) return false;
+  if (el.closest("#frameup-root")) return false;
+  if (el instanceof HTMLElement && el.hasAttribute("data-frameup-interaction")) return false;
+  if (el instanceof HTMLElement && el.hasAttribute("data-frameup-ghost")) return false;
 
   const now = performance.now();
   const cached = visibilityCache.get(el);

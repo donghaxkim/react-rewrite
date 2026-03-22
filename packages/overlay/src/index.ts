@@ -23,22 +23,133 @@ import { moveHandler } from "./tools/move.js";
 import { drawHandler } from "./tools/draw.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
+import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 
 declare global {
   interface Window {
-    __SKETCH_UI_WS_PORT__?: number;
+    __FRAMEUP_WS_PORT__?: number;
   }
 }
 
+// ---------------------------------------------------------------------------
+// Error boundary — prevents overlay crashes from affecting the host app
+// ---------------------------------------------------------------------------
+
+let errorToastEl: HTMLDivElement | null = null;
+let errorToastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/** Check if an error likely originated from overlay code */
+function isOverlayError(error: unknown): boolean {
+  const stack = (error instanceof Error && error.stack) ? error.stack : String(error);
+  return /frameup|overlay/i.test(stack);
+}
+
+/** Show a minimal error toast inside the Shadow DOM */
+function showErrorToast(message: string): void {
+  const root = getShadowRoot();
+  if (!root) return;
+
+  // Remove existing error toast if present
+  if (errorToastEl && errorToastEl.parentNode) {
+    errorToastEl.parentNode.removeChild(errorToastEl);
+  }
+  if (errorToastTimeout) clearTimeout(errorToastTimeout);
+
+  const container = document.createElement("div");
+  container.setAttribute("style", [
+    "position: fixed",
+    "bottom: 72px",
+    "right: 16px",
+    `z-index: 2147483647`,
+    `background: rgba(30, 30, 30, 0.92)`,
+    `color: #fff`,
+    `font-family: ${FONT_FAMILY}`,
+    `font-size: 12px`,
+    `padding: 10px 14px`,
+    `border-radius: ${RADII.sm}`,
+    `box-shadow: ${SHADOWS.md}`,
+    `max-width: 320px`,
+    `display: flex`,
+    `align-items: center`,
+    `gap: 10px`,
+    `opacity: 0`,
+    `transition: opacity ${TRANSITIONS.medium}`,
+  ].join("; "));
+
+  const text = document.createElement("span");
+  text.textContent = message;
+  text.setAttribute("style", "flex: 1;");
+
+  const dismissBtn = document.createElement("button");
+  dismissBtn.textContent = "Dismiss";
+  dismissBtn.setAttribute("style", [
+    "background: rgba(255,255,255,0.15)",
+    "border: none",
+    "color: #fff",
+    `font-family: ${FONT_FAMILY}`,
+    "font-size: 11px",
+    "padding: 3px 8px",
+    `border-radius: ${RADII.xs}`,
+    "cursor: pointer",
+    "white-space: nowrap",
+  ].join("; "));
+  dismissBtn.addEventListener("click", () => {
+    container.style.opacity = "0";
+    setTimeout(() => container.remove(), 200);
+    if (errorToastTimeout) clearTimeout(errorToastTimeout);
+    errorToastEl = null;
+  });
+
+  container.appendChild(text);
+  container.appendChild(dismissBtn);
+  root.appendChild(container);
+  errorToastEl = container;
+
+  // Fade in
+  requestAnimationFrame(() => {
+    container.style.opacity = "1";
+  });
+
+  // Auto-dismiss after 8 seconds
+  errorToastTimeout = setTimeout(() => {
+    container.style.opacity = "0";
+    setTimeout(() => container.remove(), 200);
+    errorToastEl = null;
+  }, 8000);
+}
+
+/** Handle an overlay error: log it and show toast */
+function handleOverlayError(error: unknown): void {
+  console.error("[FrameUp]", error);
+  showErrorToast("FrameUp encountered an error. Your app is unaffected.");
+}
+
+/** Install global error handlers that catch overlay-originating errors */
+function installGlobalErrorHandlers(): void {
+  window.addEventListener("error", (event: ErrorEvent) => {
+    if (isOverlayError(event.error ?? event.message)) {
+      handleOverlayError(event.error ?? event.message);
+      event.preventDefault(); // Prevent default browser error logging
+    }
+    // Non-overlay errors pass through untouched
+  });
+
+  window.addEventListener("unhandledrejection", (event: PromiseRejectionEvent) => {
+    if (isOverlayError(event.reason)) {
+      handleOverlayError(event.reason);
+      event.preventDefault();
+    }
+  });
+}
 
 function init(): void {
-  const wsPort = window.__SKETCH_UI_WS_PORT__;
+  const wsPort = window.__FRAMEUP_WS_PORT__;
   if (!wsPort) {
-    console.warn("[SketchUI] No WebSocket port found.");
+    console.warn("[FrameUp] No WebSocket port found.");
     return;
   }
 
-  if (document.getElementById("sketch-ui-root")) return; // Already initialized
+  if (document.getElementById("frameup-root")) return; // Already initialized
 
   connect(wsPort);
   mountToolbar(close);
@@ -127,7 +238,7 @@ function init(): void {
     }
     const data = serializeAnnotations();
     if (!data.moves.length && !data.annotations.length && !data.colorChanges.length) {
-      showToast("Nothing to generate — make some visual changes first");
+      showToast("Nothing to confirm — make some visual changes first");
       return;
     }
     generating = true;
@@ -180,7 +291,7 @@ function init(): void {
     showToast("Canvas cleared");
   });
 
-  console.log("[SketchUI] Overlay initialized with Phase 2A canvas tools");
+  console.log("[FrameUp] Overlay initialized with Phase 2A canvas tools");
 }
 
 function close(): void {
@@ -199,8 +310,17 @@ function close(): void {
   destroyToolbar();
 }
 
+function safeInit(): void {
+  try {
+    init();
+    installGlobalErrorHandlers();
+  } catch (err) {
+    handleOverlayError(err);
+  }
+}
+
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", safeInit);
 } else {
-  init();
+  safeInit();
 }

@@ -1,5 +1,5 @@
 // packages/overlay/src/tools/resolve-helper.ts
-import type { ComponentRef } from "@sketch-ui/shared";
+import type { ComponentRef } from "@frameup/shared";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import { isInternalName } from "../utils/component-filter.js";

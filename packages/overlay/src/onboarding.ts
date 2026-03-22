@@ -1,7 +1,7 @@
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { getShadowRoot } from "./toolbar.js";
 
-const STORAGE_KEY = "sketch-ui-onboarding-seen";
+const STORAGE_KEY = "frameup-onboarding-seen";
 
 let hintEl: HTMLDivElement | null = null;
 let dismissTimer: ReturnType<typeof setTimeout> | null = null;
