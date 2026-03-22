@@ -1,7 +1,7 @@
 // packages/overlay/src/tools/color.ts
 import type { ToolEventHandler } from "../interaction.js";
 import { getPageElementAtPoint, setInteractionPointerEvents } from "../interaction.js";
-import { addAnnotation, type ColorOverrideRuntime } from "../canvas-state.js";
+import { addAnnotation, viewportToPage, type ColorOverrideRuntime } from "../canvas-state.js";
 import { addColorBadge } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
 import { openColorPicker, closeColorPicker } from "../color-picker.js";
@@ -54,7 +54,8 @@ export const colorHandler: ToolEventHandler = {
         if (toColor && toColor !== fromColor) {
           const id = crypto.randomUUID();
           const rect = targetEl.getBoundingClientRect();
-          addColorBadge(id, rect.right + window.scrollX, rect.top + window.scrollY, toColor);
+          const page = viewportToPage(rect.right, rect.top);
+          addColorBadge(id, page.x, page.y, toColor);
           addAnnotation({
             type: "colorChange",
             id,

@@ -1,7 +1,7 @@
 // packages/overlay/src/tools/draw.ts
 import type { ToolEventHandler } from "../interaction.js";
 import type { DrawAnnotation } from "@sketch-ui/shared";
-import { getToolOptions, addAnnotation } from "../canvas-state.js";
+import { getToolOptions, addAnnotation, viewportToPage } from "../canvas-state.js";
 import { createLivePath, addStrokePath } from "../annotation-layer.js";
 import { simplifyPoints } from "../utils/rdp.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
@@ -14,18 +14,16 @@ export const drawHandler: ToolEventHandler = {
     const opts = getToolOptions();
     livePath = createLivePath(opts.brushColor, opts.brushSize);
     if (livePath) {
-      const pageX = e.clientX + window.scrollX;
-      const pageY = e.clientY + window.scrollY;
-      livePath.addPoint(pageX, pageY);
+      const page = viewportToPage(e.clientX, e.clientY);
+      livePath.addPoint(page.x, page.y);
     }
     // Resolve target from start point (async — resolves by mouseup)
     startComponentPromise = resolveComponentAtPoint(e.clientX, e.clientY);
   },
   onMouseMove(e: MouseEvent) {
     if (!livePath) return;
-    const pageX = e.clientX + window.scrollX;
-    const pageY = e.clientY + window.scrollY;
-    livePath.addPoint(pageX, pageY);
+    const page = viewportToPage(e.clientX, e.clientY);
+    livePath.addPoint(page.x, page.y);
   },
   async onMouseUp(_e: MouseEvent) {
     if (!livePath) return;

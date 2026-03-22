@@ -1,7 +1,7 @@
 // packages/overlay/src/tools/move.ts
 import type { ToolEventHandler } from "../interaction.js";
 import { getSelection, getSelectedElement } from "../selection.js";
-import { setActiveTool, getGhosts, moveGhost, hasGhostForElement } from "../canvas-state.js";
+import { setActiveTool, getGhosts, moveGhost, hasGhostForElement, viewportToPage } from "../canvas-state.js";
 import { createGhost, updateGhostPosition, findGhostAtPoint, setGhostDragging, setGhostSettled } from "../ghost-layer.js";
 import type { GhostEntry } from "../canvas-state.js";
 
@@ -16,9 +16,10 @@ export const moveHandler: ToolEventHandler = {
     const existingGhost = findGhostAtPoint(e.clientX, e.clientY);
     if (existingGhost) {
       dragTarget = existingGhost;
+      const page = viewportToPage(e.clientX, e.clientY);
       dragOffset = {
-        x: e.clientX + window.scrollX - existingGhost.currentPos.x,
-        y: e.clientY + window.scrollY - existingGhost.currentPos.y,
+        x: page.x - existingGhost.currentPos.x,
+        y: page.y - existingGhost.currentPos.y,
       };
       isDragging = true;
       setGhostDragging(dragTarget.id);
@@ -44,9 +45,10 @@ export const moveHandler: ToolEventHandler = {
       for (const ghost of getGhosts().values()) {
         if (ghost.originalEl === el || ghost.originalEl.contains(el) || el.contains(ghost.originalEl)) {
           dragTarget = ghost;
+          const page = viewportToPage(e.clientX, e.clientY);
           dragOffset = {
-            x: e.clientX + window.scrollX - ghost.currentPos.x,
-            y: e.clientY + window.scrollY - ghost.currentPos.y,
+            x: page.x - ghost.currentPos.x,
+            y: page.y - ghost.currentPos.y,
           };
           isDragging = true;
           setGhostDragging(dragTarget.id);
@@ -62,9 +64,10 @@ export const moveHandler: ToolEventHandler = {
     });
 
     dragTarget = ghost;
+    const page = viewportToPage(e.clientX, e.clientY);
     dragOffset = {
-      x: e.clientX + window.scrollX - ghost.currentPos.x,
-      y: e.clientY + window.scrollY - ghost.currentPos.y,
+      x: page.x - ghost.currentPos.x,
+      y: page.y - ghost.currentPos.y,
     };
     isDragging = true;
     setGhostDragging(dragTarget.id);
@@ -72,8 +75,9 @@ export const moveHandler: ToolEventHandler = {
 
   onMouseMove(e: MouseEvent) {
     if (!isDragging || !dragTarget) return;
-    const pageX = e.clientX + window.scrollX - dragOffset.x;
-    const pageY = e.clientY + window.scrollY - dragOffset.y;
+    const page = viewportToPage(e.clientX, e.clientY);
+    const pageX = page.x - dragOffset.x;
+    const pageY = page.y - dragOffset.y;
     updateGhostPosition(dragTarget.id, pageX, pageY);
   },
 

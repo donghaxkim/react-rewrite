@@ -1,11 +1,13 @@
 // packages/overlay/src/annotation-layer.ts
 import { getShadowRoot } from "./toolbar.js";
 import { COLORS, SHADOWS, RADII, FONT_FAMILY } from "./design-tokens.js";
+import { getCanvasTransform, onCanvasTransformChange } from "./canvas-state.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 let svgEl: SVGSVGElement | null = null;
 let rootGroup: SVGGElement | null = null;
+let unsubTransform: (() => void) | null = null;
 
 export function initAnnotationLayer(): void {
   const shadowRoot = getShadowRoot();
@@ -22,22 +24,32 @@ export function initAnnotationLayer(): void {
 
   shadowRoot.appendChild(svgEl);
 
-  window.addEventListener("scroll", syncScroll, { passive: true });
-  syncScroll();
+  window.addEventListener("scroll", syncTransform, { passive: true });
+  unsubTransform = onCanvasTransformChange(syncTransform);
+  syncTransform();
 }
 
 let rafId: number | null = null;
 
-function syncScroll(): void {
+/**
+ * Sync the annotation root group with both scroll offset and canvas transform.
+ * Annotations are stored in page coordinates, so we apply:
+ *   1. Canvas scale + offset (zoom/pan)
+ *   2. Scroll offset is already baked into the canvas transform when active
+ */
+function syncTransform(): void {
   if (rafId !== null) return;
   rafId = requestAnimationFrame(() => {
     rafId = null;
-    if (rootGroup) {
-      rootGroup.setAttribute(
-        "transform",
-        `translate(${-window.scrollX}, ${-window.scrollY})`
-      );
-    }
+    if (!rootGroup) return;
+    const { scale, offsetX, offsetY } = getCanvasTransform();
+    // When canvas is active (scale !== 1 or offset !== 0), the canvas transform
+    // already accounts for panning. Annotations in page coords need the same
+    // scale + translate as the page content wrapper.
+    rootGroup.setAttribute(
+      "transform",
+      `translate(${offsetX}, ${offsetY}) scale(${scale})`
+    );
   });
 }
 
@@ -135,7 +147,9 @@ export function clearAnnotationLayer(): void {
 }
 
 export function destroyAnnotationLayer(): void {
-  window.removeEventListener("scroll", syncScroll);
+  window.removeEventListener("scroll", syncTransform);
+  unsubTransform?.();
+  unsubTransform = null;
   svgEl?.remove();
   svgEl = null;
   rootGroup = null;

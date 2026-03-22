@@ -1,7 +1,7 @@
 // packages/overlay/src/tools/text.ts
 import type { ToolEventHandler } from "../interaction.js";
 import type { ComponentRef } from "@sketch-ui/shared";
-import { getToolOptions, addAnnotation } from "../canvas-state.js";
+import { getToolOptions, addAnnotation, viewportToPage } from "../canvas-state.js";
 import { addTextAnnotation } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
 import { COLORS, RADII, FONT_FAMILY } from "../design-tokens.js";
@@ -15,9 +15,8 @@ export const textHandler: ToolEventHandler = {
     // If there's an active input, commit it first
     if (activeInput) commitText();
 
-    const pageX = e.clientX + window.scrollX;
-    const pageY = e.clientY + window.scrollY;
-    clickPos = { pageX, pageY };
+    const page = viewportToPage(e.clientX, e.clientY);
+    clickPos = { pageX: page.x, pageY: page.y };
     // Resolve target async — will be available by the time user finishes typing
     resolveComponentAtPoint(e.clientX, e.clientY).then(comp => { targetComp = comp; });
 
