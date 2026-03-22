@@ -24,14 +24,18 @@ export function createSegmented(
 
   let activeValue = values.get(descriptor.key) ?? descriptor.defaultValue;
 
-  const buttons: Array<{ btn: HTMLButtonElement; value: string }> = [];
+  const buttons: Array<{ btn: HTMLButtonElement; value: string; opt: typeof enumValues[number] }> = [];
 
   function setActiveButton(cssValue: string): void {
     activeValue = cssValue;
-    for (const { btn, value } of buttons) {
+    for (const { btn, value, opt } of buttons) {
       const isActive = value === cssValue;
       btn.style.background = isActive ? COLORS.accent : "transparent";
       btn.style.color = isActive ? COLORS.textOnAccent : COLORS.textSecondary;
+      // Show Tailwind class as tooltip on the active segment
+      btn.title = isActive && opt.tailwindValue
+        ? `${opt.label} (${opt.tailwindValue})`
+        : opt.label;
     }
   }
 
@@ -63,7 +67,7 @@ export function createSegmented(
       onCommit();
     });
 
-    buttons.push({ btn, value: opt.value });
+    buttons.push({ btn, value: opt.value, opt });
     container.appendChild(btn);
   }
 

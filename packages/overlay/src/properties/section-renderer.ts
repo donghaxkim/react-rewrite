@@ -10,6 +10,24 @@ import { COLORS, FONT_FAMILY, RADII, TRANSITIONS } from "../design-tokens.js";
 // Persists collapse state across re-renders and element selections
 const collapsedGroups = new Set<string>();
 
+/** Returns true if the given group is currently collapsed in the sidebar. */
+export function isGroupCollapsed(group: string): boolean {
+  return collapsedGroups.has(group);
+}
+
+/** Listeners notified when a section is expanded so deferred values can be read. */
+type SectionExpandListener = (group: string) => void;
+const expandListeners: SectionExpandListener[] = [];
+
+/** Register a callback for when a collapsed section is expanded. */
+export function onSectionExpand(fn: SectionExpandListener): () => void {
+  expandListeners.push(fn);
+  return () => {
+    const idx = expandListeners.indexOf(fn);
+    if (idx >= 0) expandListeners.splice(idx, 1);
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -277,6 +295,8 @@ export function renderSections(
         collapsedGroups.add(group);
       } else {
         collapsedGroups.delete(group);
+        // Notify listeners so deferred values can be read
+        for (const fn of expandListeners) fn(group);
       }
       const chevron = header.querySelector(".prop-section-chevron");
       if (chevron) {

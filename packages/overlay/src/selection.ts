@@ -1,4 +1,20 @@
 // packages/overlay/src/selection.ts
+//
+// Coordinate space note (infinite canvas):
+// When the canvas transform is active (zoom/pan via CSS transform on a wrapper div),
+// all coordinate APIs used here remain correct without explicit mapping:
+//   - getBoundingClientRect() returns viewport coordinates that already account for
+//     CSS transforms, so highlight rects and label positioning are correct.
+//   - elementFromPoint() / elementsFromPoint() accept viewport coordinates and the
+//     browser resolves hit-testing through CSS transforms automatically.
+//   - The highlight canvas (highlight-canvas.ts) is position:fixed and draws in
+//     viewport space, matching getBoundingClientRect() output.
+//   - The selection label and marquee box are position:fixed, so using clientX/clientY
+//     and rect.left/rect.top (all viewport coords) is correct.
+//   - The area selection (area-selection.ts) compares marquee bounds (viewport coords
+//     from clientX/clientY) against getBoundingClientRect() (viewport coords). Consistent.
+// Therefore, no viewportToPage/pageToViewport mapping is needed in this module.
+//
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import type { ComponentInfo } from "@sketch-ui/shared";

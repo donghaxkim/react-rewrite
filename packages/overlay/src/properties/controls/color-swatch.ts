@@ -2,6 +2,7 @@ import type { PropertyDescriptor } from "@sketch-ui/shared";
 import type { PropertyControl, OnPreview, OnCommit } from "./types.js";
 import { COLORS, FONT_FAMILY, RADII } from "../../design-tokens.js";
 import { openColorPicker, closeColorPicker } from "../../color-picker.js";
+import { getTokenMap, resolveTokenForValue } from "../tailwind-resolver.js";
 
 let _colorCtx: CanvasRenderingContext2D | null = null;
 function getColorCtx(): CanvasRenderingContext2D {
@@ -38,8 +39,12 @@ export function createColorSwatch(
   input.className = "prop-input";
   input.style.cssText = `flex:1; min-width:0;`;
 
+  const tokenLabel = document.createElement("span");
+  tokenLabel.style.cssText = `font-size:10px; color:${COLORS.textSecondary}; font-family:${FONT_FAMILY};`;
+
   container.appendChild(swatch);
   container.appendChild(input);
+  container.appendChild(tokenLabel);
 
   let currentValue = values.get(descriptor.key) ?? descriptor.defaultValue;
   let pickerOpen = false;
@@ -72,6 +77,19 @@ export function createColorSwatch(
       swatch.style.background = `repeating-conic-gradient(#ccc 0% 25%, #fff 0% 50%) 0 0 / 10px 10px`;
     } else {
       swatch.style.background = cssValue;
+    }
+
+    // Resolve Tailwind color token
+    try {
+      const tokenMap = getTokenMap();
+      const token = resolveTokenForValue(cssValue, tokenMap.colorsReverse);
+      if (token) {
+        tokenLabel.textContent = `${descriptor.tailwindPrefix ?? "bg"}-${token}`;
+      } else {
+        tokenLabel.textContent = "";
+      }
+    } catch {
+      tokenLabel.textContent = "";
     }
   }
 

@@ -97,6 +97,25 @@ const SIDEBAR_STYLES = `
     direction: rtl;
     text-align: left;
   }
+  .prop-sidebar-saving-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: ${COLORS.accent};
+    margin-left: 6px;
+    vertical-align: middle;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+  .prop-sidebar-saving-dot.active {
+    opacity: 1;
+    animation: prop-saving-pulse 0.8s ease-in-out infinite;
+  }
+  @keyframes prop-saving-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
   .prop-sidebar-warning {
     display: flex;
     align-items: center;
@@ -185,6 +204,8 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
   replaceContent: (contentEl: HTMLElement) => void;
   showWarning: (message: string, actionLabel: string, onAction: () => void) => void;
   clearWarning: () => void;
+  showSaving: () => void;
+  hideSaving: () => void;
 } {
   // Inject styles
   const style = document.createElement("style");
@@ -210,6 +231,9 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
 
   const componentNameEl = document.createElement("div");
   componentNameEl.className = "prop-sidebar-component-name";
+
+  const savingDot = document.createElement("span");
+  savingDot.className = "prop-sidebar-saving-dot";
 
   const filePathEl = document.createElement("div");
   filePathEl.className = "prop-sidebar-file-path";
@@ -295,6 +319,7 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
     contentEl: HTMLElement,
   ): void {
     componentNameEl.textContent = `<${componentName}>`;
+    componentNameEl.appendChild(savingDot);
     filePathEl.textContent = `${filePath}:${lineNumber}`;
     filePathEl.title = `${filePath}:${lineNumber}`;
 
@@ -343,6 +368,14 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
     warningBanner.innerHTML = "";
   }
 
+  function showSaving(): void {
+    savingDot.classList.add("active");
+  }
+
+  function hideSaving(): void {
+    savingDot.classList.remove("active");
+  }
+
   return {
     show,
     hide,
@@ -351,5 +384,7 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
     replaceContent,
     showWarning,
     clearWarning,
+    showSaving,
+    hideSaving,
   };
 }

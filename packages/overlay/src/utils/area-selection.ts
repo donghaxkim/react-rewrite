@@ -1,4 +1,11 @@
 // packages/overlay/src/utils/area-selection.ts
+//
+// Coordinate space note (infinite canvas):
+// All coordinates here are in viewport space. The DragRect comes from mouse clientX/clientY
+// (viewport coords), elementsFromPoint() accepts viewport coords, and getBoundingClientRect()
+// returns viewport coords that account for CSS transforms. Everything is consistent without
+// explicit viewportToPage mapping.
+//
 import { isValidElement } from "./component-filter.js";
 
 const COVERAGE_THRESHOLD = 0.75;

@@ -1,7 +1,7 @@
-import type { ComponentInfo, ElementIdentity } from "@sketch-ui/shared";
+import type { ComponentInfo, ElementIdentity, PropertyGroup } from "@sketch-ui/shared";
 import { ALL_DESCRIPTORS } from "./property-descriptors.js";
 const DESCRIPTOR_MAP = new Map(ALL_DESCRIPTORS.map(d => [d.key, d]));
-import { renderSections } from "./section-renderer.js";
+import { renderSections, isGroupCollapsed, onSectionExpand } from "./section-renderer.js";
 import { createSidebar } from "./property-sidebar.js";
 import { getTokenMap, resolveTokenForValue } from "./tailwind-resolver.js";
 import type { MergedTokenMap } from "./tailwind-resolver.js";
@@ -9,9 +9,19 @@ import { send, onCommitResult } from "../bridge.js";
 import type { PropertyControl } from "./controls/types.js";
 import { pushUndoAction, type PropertyChangeRuntime } from "../canvas-state.js";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
+import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 
 // Display values that enable flex layout controls
 const FLEX_DISPLAYS = new Set(["flex", "inline-flex"]);
+
+// Groups whose CSS properties are read immediately on inspect
+const ESSENTIAL_GROUPS: Set<PropertyGroup> = new Set(["layout", "spacing", "size"]);
+
+// Groups whose CSS properties are deferred until the section is expanded
+const DEFERRED_GROUPS: Set<PropertyGroup> = new Set(["typography", "background", "border", "effects"]);
+
+// Timeout for commit result — if no response arrives, assume success
+const COMMIT_RESULT_TIMEOUT_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +57,16 @@ let reacquireTimer: ReturnType<typeof setTimeout>;
 let commitTimer: ReturnType<typeof setTimeout> | null = null;
 const COMMIT_DEBOUNCE_MS = 300;
 
+// Tracks in-flight commit so we can revert on failure
+let inflightCommit: {
+  batch: Map<string, PendingUpdate>;
+  previousOriginals: Map<string, string>;
+  timeoutId: ReturnType<typeof setTimeout>;
+} | null = null;
+
+// Cleanup for section-expand listener
+let cleanupExpandListener: (() => void) | null = null;
+
 // ---------------------------------------------------------------------------
 // HMR survival observer
 // ---------------------------------------------------------------------------
@@ -64,6 +84,10 @@ const observer = new MutationObserver(() => {
  * After HMR replaces the DOM, find the new element matching the stored
  * elementIdentity by walking fibers to match componentName + source location.
  * Re-inspects without slide animation if found; deselects if not.
+ *
+ * Uses a dual strategy:
+ * 1. Synchronous fiber walk with _debugSource (React 18)
+ * 2. Async getOwnerStack from bippy/source (React 19, where _debugSource is absent)
  */
 function reacquireElement(): void {
   const identity = state.elementIdentity;
@@ -73,15 +97,31 @@ function reacquireElement(): void {
     return;
   }
 
-  // Find all elements with the same tag, then check fibers for source match
+  // Strategy 1: synchronous _debugSource fiber walk (React 18)
+  const matched = reacquireViaDebugSource(identity);
+  if (matched) {
+    inspect(matched, info);
+    return;
+  }
+
+  // Strategy 2: async getOwnerStack (React 19)
+  reacquireViaOwnerStack(identity).then((asyncMatched) => {
+    if (asyncMatched) {
+      inspect(asyncMatched, info);
+    } else {
+      deselect();
+    }
+  });
+}
+
+/** Synchronous reacquisition via _debugSource (React 18). */
+function reacquireViaDebugSource(identity: ElementIdentity): HTMLElement | null {
   const candidates = document.querySelectorAll(identity.tagName);
-  let matched: HTMLElement | null = null;
 
   for (const el of candidates) {
     if (!(el instanceof HTMLElement)) continue;
     try {
       let fiber = getFiberFromHostInstance(el);
-      // Walk up fiber tree to find a composite fiber with matching source
       while (fiber) {
         if (isCompositeFiber(fiber)) {
           const source = fiber._debugSource;
@@ -92,8 +132,7 @@ function reacquireElement(): void {
             source.fileName?.endsWith(identity.filePath) &&
             source.lineNumber === identity.lineNumber
           ) {
-            matched = el;
-            break;
+            return el;
           }
         }
         fiber = fiber.return;
@@ -101,30 +140,108 @@ function reacquireElement(): void {
     } catch {
       // fiber walk may fail
     }
-    if (matched) break;
   }
 
-  if (matched) {
-    inspect(matched, info);
-  } else {
-    deselect();
+  return null;
+}
+
+/** Async reacquisition via getOwnerStack (React 19). */
+async function reacquireViaOwnerStack(identity: ElementIdentity): Promise<HTMLElement | null> {
+  const candidates = document.querySelectorAll(identity.tagName);
+
+  for (const el of candidates) {
+    if (!(el instanceof HTMLElement)) continue;
+    try {
+      const fiber = getFiberFromHostInstance(el);
+      if (!fiber) continue;
+
+      const frames = await getOwnerStack(fiber);
+      if (!frames || frames.length === 0) continue;
+
+      for (const frame of frames) {
+        if (!frame.functionName) continue;
+        const name = frame.functionName;
+        if (name !== identity.componentName) continue;
+
+        let filePath = "";
+        if (frame.fileName) {
+          const normalized = normalizeFileName(frame.fileName);
+          if (isSourceFile(normalized)) {
+            filePath = normalized;
+          }
+        }
+
+        if (
+          filePath &&
+          identity.filePath.endsWith(filePath) &&
+          (frame.lineNumber ?? 0) === identity.lineNumber
+        ) {
+          return el;
+        }
+      }
+    } catch {
+      // getOwnerStack may fail — continue to next candidate
+    }
   }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-function readComputedValues(element: HTMLElement): Map<string, string> {
+/**
+ * Reads computed CSS values for the given element.
+ * When `onlyGroups` is provided, only reads properties belonging to those groups.
+ * This avoids unnecessary getPropertyValue calls for collapsed sections on initial inspect.
+ */
+function readComputedValues(
+  element: HTMLElement,
+  onlyGroups?: Set<PropertyGroup>,
+): Map<string, string> {
   const computed = getComputedStyle(element);
   const values = new Map<string, string>();
 
   for (const desc of ALL_DESCRIPTORS) {
+    if (onlyGroups && !onlyGroups.has(desc.group)) {
+      // Use default placeholder — will be read lazily when section expands
+      values.set(desc.key, desc.defaultValue);
+      continue;
+    }
     const value = computed.getPropertyValue(desc.cssProperty).trim();
     values.set(desc.key, value || desc.defaultValue);
   }
 
   return values;
+}
+
+/**
+ * Reads deferred computed values for a specific group and updates state + controls.
+ */
+function readDeferredGroup(group: string): void {
+  if (!state.selectedElement) return;
+
+  const computed = getComputedStyle(state.selectedElement);
+  for (const desc of ALL_DESCRIPTORS) {
+    if (desc.group !== group) continue;
+    // Skip properties that already have active overrides
+    if (state.activeOverrides.has(desc.key)) continue;
+
+    const value = computed.getPropertyValue(desc.cssProperty).trim();
+    const resolved = value || desc.defaultValue;
+    state.currentValues.set(desc.key, resolved);
+
+    // Also update originalValues if this group hasn't been read yet
+    if (state.originalValues.get(desc.key) === desc.defaultValue) {
+      state.originalValues.set(desc.key, resolved);
+    }
+
+    // Update controls that display this value
+    for (const ctrl of controls) {
+      ctrl.setValue(desc.key, resolved);
+    }
+  }
 }
 
 function destroyControls(): void {
@@ -164,6 +281,8 @@ export function scheduledCommit(): void {
 
 function resetState(): void {
   if (commitTimer) { clearTimeout(commitTimer); commitTimer = null; }
+  if (cleanupExpandListener) { cleanupExpandListener(); cleanupExpandListener = null; }
+  if (inflightCommit) { clearTimeout(inflightCommit.timeoutId); inflightCommit = null; }
   state = {
     selectedElement: null,
     componentInfo: null,
@@ -190,9 +309,62 @@ export function initPropertyController(shadowRoot: ShadowRoot): void {
     resetState();
   });
 
-  // Surface transform errors from the CLI back to the user
+  // Surface transform errors from the CLI back to the user, and resolve in-flight commits
   onCommitResult((success, errorCode, errorMessage) => {
-    if (!success && sidebar) {
+    // Always hide saving indicator
+    if (sidebar) sidebar.hideSaving();
+
+    if (inflightCommit) {
+      clearTimeout(inflightCommit.timeoutId);
+
+      if (success) {
+        // Commit succeeded — in-flight state already applied optimistically
+        inflightCommit = null;
+      } else {
+        // Commit failed — revert to previous originals and remove inline overrides
+        const { batch, previousOriginals } = inflightCommit;
+        inflightCommit = null;
+
+        // Restore originalValues to pre-commit state
+        for (const [key] of batch) {
+          const prev = previousOriginals.get(key);
+          if (prev !== undefined) {
+            state.originalValues.set(key, prev);
+          }
+        }
+
+        // Remove inline style overrides for the failed batch
+        if (state.selectedElement) {
+          for (const [key] of batch) {
+            (state.selectedElement.style as any)[key] = "";
+            state.activeOverrides.delete(key);
+            const orig = state.originalValues.get(key);
+            if (orig !== undefined) {
+              state.currentValues.set(key, orig);
+            }
+          }
+          // Refresh control displays
+          for (const ctrl of controls) {
+            for (const [key] of batch) {
+              const orig = state.originalValues.get(key);
+              if (orig !== undefined) ctrl.setValue(key, orig);
+            }
+          }
+        }
+
+        // Show error
+        if (sidebar) {
+          const friendlyMessages: Record<string, string> = {
+            DYNAMIC_CLASSNAME: "Cannot modify dynamic className expression",
+            CONFLICTING_CLASS: "Conflicting conditional class detected",
+            ELEMENT_NOT_FOUND: "Could not find element in source",
+          };
+          const msg = friendlyMessages[errorCode || ""] || errorMessage || "Failed to write changes";
+          sidebar.showWarning(msg, "Dismiss", () => sidebar.clearWarning());
+        }
+      }
+    } else if (!success && sidebar) {
+      // No in-flight commit tracked but got an error — still show it
       const friendlyMessages: Record<string, string> = {
         DYNAMIC_CLASSNAME: "Cannot modify dynamic className expression",
         CONFLICTING_CLASS: "Conflicting conditional class detected",
@@ -228,12 +400,24 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
     tagName: info.tagName,
   };
 
-  // Read current computed values
-  const values = readComputedValues(element);
+  // Read essential groups immediately; defer collapsed groups
+  const groupsToRead = new Set<PropertyGroup>(ESSENTIAL_GROUPS);
+  for (const g of DEFERRED_GROUPS) {
+    if (!isGroupCollapsed(g)) groupsToRead.add(g);
+  }
+  const values = readComputedValues(element, groupsToRead);
   state.currentValues = values;
   state.originalValues = new Map(values);
   state.activeOverrides = new Map();
   state.pendingBatch = new Map();
+
+  // Listen for section expansions to lazily read deferred values
+  if (cleanupExpandListener) cleanupExpandListener();
+  cleanupExpandListener = onSectionExpand((group) => {
+    if (DEFERRED_GROUPS.has(group as PropertyGroup)) {
+      readDeferredGroup(group);
+    }
+  });
 
   // Render sections
   const { container, controls: newControls } = renderSections(
@@ -370,10 +554,31 @@ export function commit(): void {
     } as PropertyChangeRuntime);
   }
 
-  // Update originalValues to new values
+  // Show saving indicator
+  if (sidebar) sidebar.showSaving();
+
+  // Save previous originals so we can revert on failure
+  const previousOriginals = new Map<string, string>();
+  for (const [key] of state.pendingBatch) {
+    previousOriginals.set(key, state.originalValues.get(key) || "");
+  }
+
+  // Optimistically update originalValues to new values
   for (const [key, update] of state.pendingBatch) {
     state.originalValues.set(key, update.value);
   }
+
+  // Track in-flight commit for potential revert on failure
+  const batchSnapshot = new Map(state.pendingBatch);
+  const timeoutId = setTimeout(() => {
+    // No response within timeout — assume success and clear
+    if (inflightCommit && inflightCommit.batch === batchSnapshot) {
+      inflightCommit = null;
+      if (sidebar) sidebar.hideSaving();
+    }
+  }, COMMIT_RESULT_TIMEOUT_MS);
+
+  inflightCommit = { batch: batchSnapshot, previousOriginals, timeoutId };
   state.pendingBatch.clear();
 }
 

@@ -1,4 +1,11 @@
 // packages/overlay/src/highlight-canvas.ts
+//
+// Coordinate space note (infinite canvas):
+// This canvas is position:fixed and sized to the viewport (window.innerWidth x innerHeight).
+// All rect coordinates come from getBoundingClientRect(), which returns viewport coordinates
+// that already account for CSS transforms (zoom/pan). Since the canvas coordinate space maps
+// 1:1 to viewport space, no viewportToPage/pageToViewport mapping is needed here.
+//
 import { getShadowRoot } from "./toolbar.js";
 import { lerp } from "./utils/lerp.js";
 import { COLORS } from "./design-tokens.js";

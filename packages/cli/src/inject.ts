@@ -31,11 +31,34 @@ export function createProxyServer(
   const overlayPath = path.join(__dirname, "overlay.js");
   let upstreamDown = false;
 
+  const fontsDir = path.join(__dirname, "fonts");
+
   const server = http.createServer((req, res) => {
+    // Normalize URL to prevent path traversal
+    const normalizedUrl = new URL(req.url || "/", "http://localhost").pathname;
+
     // Serve overlay bundle
-    if (req.url === "/__sketch-ui/overlay.js") {
+    if (normalizedUrl === "/__sketch-ui/overlay.js") {
       res.writeHead(200, { "Content-Type": "application/javascript" });
       fs.createReadStream(overlayPath).pipe(res);
+      return;
+    }
+
+    // Serve font files
+    if (normalizedUrl === "/__sketch-ui/inter-regular.woff2") {
+      res.writeHead(200, {
+        "Content-Type": "font/woff2",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      fs.createReadStream(path.join(fontsDir, "inter-regular.woff2")).pipe(res);
+      return;
+    }
+    if (normalizedUrl === "/__sketch-ui/inter-semibold.woff2") {
+      res.writeHead(200, {
+        "Content-Type": "font/woff2",
+        "Cache-Control": "public, max-age=31536000, immutable",
+      });
+      fs.createReadStream(path.join(fontsDir, "inter-semibold.woff2")).pipe(res);
       return;
     }
 

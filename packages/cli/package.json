@@ -7,8 +7,12 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
-    "build": "tsc && cp ../overlay/dist/overlay.js dist/overlay.js",
+    "build": "tsc && cp ../overlay/dist/overlay.js dist/overlay.js && mkdir -p dist/fonts && cp src/fonts/*.woff2 dist/fonts/",
     "dev": "tsc --watch",
     "test": "vitest"
   },

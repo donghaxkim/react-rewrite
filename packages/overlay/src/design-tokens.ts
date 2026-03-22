@@ -1,5 +1,4 @@
 // packages/overlay/src/design-tokens.ts
-import { INTER_REGULAR_BASE64, INTER_SEMIBOLD_BASE64 } from "./fonts/inter.js";
 
 // --- Colors ---
 export const COLORS = {
@@ -56,14 +55,14 @@ export const FONT_FACE_CSS = `
     font-style: normal;
     font-weight: 400;
     font-display: swap;
-    src: url(data:font/woff2;base64,${INTER_REGULAR_BASE64}) format('woff2');
+    src: url('/__sketch-ui/inter-regular.woff2') format('woff2');
   }
   @font-face {
     font-family: 'Inter';
     font-style: normal;
     font-weight: 600;
     font-display: swap;
-    src: url(data:font/woff2;base64,${INTER_SEMIBOLD_BASE64}) format('woff2');
+    src: url('/__sketch-ui/inter-semibold.woff2') format('woff2');
   }
 `;
 
