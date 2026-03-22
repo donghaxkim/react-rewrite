@@ -153,8 +153,8 @@ function init(): void {
         // (#6) Clear selection first (closes sidebar, avoids stale refs after HMR)
         clearSelection();
         clearAnnotationLayer();
-
         resetCanvas();
+        updateEyeButton(true);
       } else {
         showToast(`Error: ${msg.error || "Generation failed"}`);
         // (#8) 5 second cooldown after errors to prevent spam
@@ -180,6 +180,7 @@ function init(): void {
     clearAnnotationLayer();
     resetCanvas();
     resetCanvasTransform();
+    updateEyeButton(true); // Reset eye icon to closed (originals hidden)
     showToast("Canvas cleared");
   });
 

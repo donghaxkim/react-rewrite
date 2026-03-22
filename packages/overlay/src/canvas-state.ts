@@ -295,7 +295,7 @@ export function resetCanvas(): void {
   ghosts = new Map();
   annotations = [];
   undoStack = [];
-  originalsHidden = false;
+  originalsHidden = true;
   canvasScale = 1;
   canvasOffsetX = 0;
   canvasOffsetY = 0;

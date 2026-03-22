@@ -24,8 +24,8 @@ import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMultiSelection, isMultiSelectActive, getHandleAtPoint, getSelectionGeometry, type CornerHandle } from "./highlight-canvas.js";
 import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
-import { findGhostAtPoint, createGhost, updateGhostPosition, setGhostDragging, setGhostSettled } from "./ghost-layer.js";
-import { moveGhost, hasGhostForElement, viewportToPage, getGhosts, type GhostEntry } from "./canvas-state.js";
+import { findGhostAtPoint } from "./ghost-layer.js";
+import type { GhostEntry } from "./canvas-state.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -164,7 +164,7 @@ let selectionLabel: HTMLDivElement | null = null;
 let marqueeBox: HTMLDivElement | null = null;
 
 // Interaction state machine
-type InteractionMode = "idle" | "pending" | "marquee" | "pending-drag" | "drag" | "resize-drag" | "move-drag";
+type InteractionMode = "idle" | "pending" | "marquee" | "pending-drag" | "drag" | "resize-drag";
 let mode: InteractionMode = "idle";
 let mouseDownPos: { x: number; y: number } | null = null;
 let mouseDownElement: HTMLElement | null = null;
@@ -179,11 +179,6 @@ let multiResizeInitials: Array<{ element: HTMLElement; width: number; height: nu
 // Shift+click tracking
 let isShiftClick = false;
 
-// Move-drag state (edge-initiated move from pointer mode)
-const EDGE_HIT_DISTANCE = 8; // px from edge to trigger move cursor
-let moveDragGhost: GhostEntry | null = null;
-let moveDragOffset = { x: 0, y: 0 };
-let isEdgeMouseDown = false;
 
 // Drag callbacks — set by drag.ts via setDragCallbacks
 let onDragStartCallback: ((e: MouseEvent, el: HTMLElement, selection: ComponentInfo) => void) | null = null;
@@ -328,40 +323,19 @@ function handleMouseDown(e: MouseEvent): void {
       return;
     }
 
-    // Check if clicking near the edge of selection → start move-drag
-    if (currentSelection && selectedElement) {
-      const geo = getSelectionGeometry();
-      if (geo && isNearEdge(e.clientX, e.clientY, geo)) {
-        e.preventDefault();
-        e.stopPropagation();
-        mouseDownPos = { x: e.clientX, y: e.clientY };
-        mode = "pending"; // Will escalate to move-drag on sufficient movement
-        mouseDownElement = selectedElement;
-        isEdgeMouseDown = true;
-        return;
-      }
-    }
   }
 
   e.preventDefault();
   e.stopPropagation();
 
-  // Check if the user clicked on a moved ghost element first — start move-drag for re-dragging
+  // Check if the user clicked on a moved ghost element first
   const ghost = findGhostAtPoint(e.clientX, e.clientY);
   if (ghost) {
     if (!e.shiftKey) clearMultiSelectState();
     mouseDownPos = { x: e.clientX, y: e.clientY };
     mouseDownElement = ghost.originalEl;
     selectedGhost = ghost;
-    // Set up for immediate move-drag of existing ghost
-    moveDragGhost = ghost;
-    const page = viewportToPage(e.clientX, e.clientY);
-    moveDragOffset = {
-      x: page.x - ghost.currentPos.x,
-      y: page.y - ghost.currentPos.y,
-    };
-    setGhostDragging(ghost.id);
-    mode = "move-drag";
+    mode = "pending";
     return;
   }
 
@@ -448,49 +422,11 @@ function handleMouseMove(e: MouseEvent): void {
     return;
   }
 
-  // Move-drag: update ghost position
-  if (mode === "move-drag" && moveDragGhost) {
-    e.preventDefault();
-    e.stopPropagation();
-    const page = viewportToPage(e.clientX, e.clientY);
-    updateGhostPosition(moveDragGhost.id, page.x - moveDragOffset.x, page.y - moveDragOffset.y);
-    return;
-  }
-
   if (mode === "pending" && mouseDownPos) {
     const dx = Math.abs(e.clientX - mouseDownPos.x);
     const dy = Math.abs(e.clientY - mouseDownPos.y);
-    if (dx > 5 || dy > 5) {
-      if (isEdgeMouseDown && selectedElement && currentSelection) {
-        // Edge-drag: create ghost and enter move-drag mode
-        if (hasGhostForElement(selectedElement)) {
-          // Already has ghost — find and drag it
-          for (const g of getGhosts().values()) {
-            if (g.originalEl === selectedElement || g.originalEl.contains(selectedElement) || selectedElement.contains(g.originalEl)) {
-              moveDragGhost = g;
-              const page = viewportToPage(e.clientX, e.clientY);
-              moveDragOffset = { x: page.x - g.currentPos.x, y: page.y - g.currentPos.y };
-              setGhostDragging(g.id);
-              break;
-            }
-          }
-        } else {
-          const ghost = createGhost(selectedElement, {
-            componentName: currentSelection.componentName,
-            filePath: currentSelection.filePath,
-            lineNumber: currentSelection.lineNumber,
-          });
-          moveDragGhost = ghost;
-          const page = viewportToPage(e.clientX, e.clientY);
-          moveDragOffset = { x: page.x - ghost.currentPos.x, y: page.y - ghost.currentPos.y };
-          setGhostDragging(ghost.id);
-        }
-        mode = "move-drag";
-        isEdgeMouseDown = false;
-      } else if (dx > 10 || dy > 10) {
-        mode = "marquee";
-        isEdgeMouseDown = false;
-      }
+    if (dx > 10 || dy > 10) {
+      mode = "marquee";
     }
   }
 
@@ -516,30 +452,18 @@ function handleMouseMove(e: MouseEvent): void {
       if (handle) {
         document.body.style.cursor = (handle === "tl" || handle === "br") ? "nwse-resize" : "nesw-resize";
         return;
+      } else {
+        document.body.style.cursor = "";
       }
-
-      // Show move cursor when hovering near edge of selection
-      if (currentSelection && selectedElement) {
-        const geo = getSelectionGeometry();
-        if (geo && isNearEdge(e.clientX, e.clientY, geo)) {
-          document.body.style.cursor = "move";
-          return;
-        }
-      }
-
-      document.body.style.cursor = "";
     }
 
-    // Show move cursor when hovering over a ghost
+    // Check ghosts first — moved elements should be hoverable at their new position
     const ghost = findGhostAtPoint(e.clientX, e.clientY);
     if (ghost) {
       const rect = ghost.cloneEl.getBoundingClientRect();
       const br = parseFloat(getComputedStyle(ghost.originalEl).borderRadius) || 4;
       setHoverTarget(rect, br + 2);
-      document.body.style.cursor = "move";
       return;
-    } else {
-      document.body.style.cursor = "";
     }
 
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
@@ -558,22 +482,6 @@ function handleMouseUp(e: MouseEvent): void {
 
   const prevMode = mode;
   mode = "idle";
-  isEdgeMouseDown = false;
-
-  // Complete move-drag — settle ghost, update selection to track ghost location
-  if (prevMode === "move-drag" && moveDragGhost) {
-    moveGhost(moveDragGhost.id, moveDragGhost.currentPos);
-    setGhostSettled(moveDragGhost.id);
-    document.body.style.cursor = "";
-    // Update selection highlight to follow the ghost's new position
-    selectedGhost = moveDragGhost;
-    selectedElement = moveDragGhost.originalEl;
-    updateSelectionPosition();
-    moveDragGhost = null;
-    mouseDownPos = null;
-    mouseDownElement = null;
-    return;
-  }
 
   // Commit resize
   if (prevMode === "resize-drag") {
@@ -835,20 +743,6 @@ function updateMultiSelectionHighlights(): void {
     targets.push({ rect, borderRadius: br + 2 });
   }
   setMultiSelectionTargets(targets);
-}
-
-/** Check if a point is near the edge of a rect (within EDGE_HIT_DISTANCE pixels) */
-function isNearEdge(px: number, py: number, rect: { x: number; y: number; w: number; h: number }): boolean {
-  const { x, y, w, h } = rect;
-  // Must be inside or very close to the rect
-  if (px < x - EDGE_HIT_DISTANCE || px > x + w + EDGE_HIT_DISTANCE) return false;
-  if (py < y - EDGE_HIT_DISTANCE || py > y + h + EDGE_HIT_DISTANCE) return false;
-  // Must be near at least one edge
-  const nearLeft = Math.abs(px - x) <= EDGE_HIT_DISTANCE;
-  const nearRight = Math.abs(px - (x + w)) <= EDGE_HIT_DISTANCE;
-  const nearTop = Math.abs(py - y) <= EDGE_HIT_DISTANCE;
-  const nearBottom = Math.abs(py - (y + h)) <= EDGE_HIT_DISTANCE;
-  return nearLeft || nearRight || nearTop || nearBottom;
 }
 
 function handleClick(e: MouseEvent): void {
