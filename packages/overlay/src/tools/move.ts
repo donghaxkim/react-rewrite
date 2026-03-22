@@ -1,6 +1,6 @@
 // packages/overlay/src/tools/move.ts
 import type { ToolEventHandler } from "../interaction.js";
-import { getSelection, getSelectedElement } from "../selection.js";
+import { getSelection, getSelectedElement, trackGhostAfterDrop } from "../selection.js";
 import { setActiveTool, getGhosts, moveGhost, hasGhostForElement, viewportToPage } from "../canvas-state.js";
 import { createGhost, updateGhostPosition, findGhostAtPoint, setGhostDragging, setGhostSettled } from "../ghost-layer.js";
 import type { GhostEntry } from "../canvas-state.js";
@@ -88,6 +88,8 @@ export const moveHandler: ToolEventHandler = {
     if (isDragging && dragTarget) {
       moveGhost(dragTarget.id, dragTarget.currentPos);
       setGhostSettled(dragTarget.id);
+      // Update selection highlight to follow the ghost's new position
+      trackGhostAfterDrop(dragTarget);
     }
     dragTarget = null;
     isDragging = false;

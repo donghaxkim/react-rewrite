@@ -191,7 +191,7 @@ export function mountToolbar(onClose: () => void): void {
     <div class="component-detail empty">No selection</div>
     <span class="divider"></span>
     <button class="icon-btn eye-btn" title="Toggle originals (.)">
-      ${EYE_OPEN_SVG}
+      ${EYE_CLOSED_SVG}
     </button>
     <button class="icon-btn undo-btn" disabled title="Undo Reorder">
       ${UNDO_SVG}
