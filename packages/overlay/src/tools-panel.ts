@@ -26,7 +26,6 @@ const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: 
   { type: "grab", icon: ICONS.grab, label: "Grab", shortcut: "H" },
   { type: "move", icon: ICONS.move, label: "Move", shortcut: "M" },
   { type: "draw", icon: ICONS.draw, label: "Draw", shortcut: "D" },
-  { type: "color", icon: ICONS.color, label: "Color", shortcut: "E" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
 ];
 
@@ -351,7 +350,7 @@ export function initToolsPanel(): void {
   const groups = [
     ["pointer", "grab"],
     ["move"],
-    ["draw", "color", "text"],
+    ["draw", "text"],
   ];
 
   for (let gi = 0; gi < groups.length; gi++) {

@@ -19,10 +19,9 @@ import {
 import { initPropertyController } from "./properties/property-controller.js";
 import { activatePointer, deactivatePointer } from "./tools/pointer.js";
 import { grabHandler } from "./tools/grab.js";
-import { moveHandler, returnToMoveAfterSelect } from "./tools/move.js";
+import { moveHandler } from "./tools/move.js";
 import { drawHandler } from "./tools/draw.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
-import { colorHandler, cleanupColorTool } from "./tools/color.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 
 declare global {
@@ -72,7 +71,6 @@ function init(): void {
   registerToolHandler("move", moveHandler);
   registerToolHandler("draw", drawHandler);
   registerToolHandler("text", textHandler);
-  registerToolHandler("color", colorHandler);
 
   // Tool change listener — handles mode switching
   onToolChange((tool, prev) => {
@@ -81,7 +79,6 @@ function init(): void {
     // Cleanup previous tool
     if (prev === "pointer") deactivatePointer();
     if (prev === "text") cleanupTextTool();
-    if (prev === "color") cleanupColorTool();
 
     // Clear caches on tool switch
     clearElementCache();
@@ -163,9 +160,8 @@ function init(): void {
     }
   });
 
-  // Canvas undo (Ctrl+Z) — returns true if handled, false if Pointer mode (Phase 1 source undo)
+  // Canvas undo (Ctrl+Z) — works in all tool modes
   setOnCanvasUndo(() => {
-    if (getActiveTool() === "pointer") return false; // Let selection.ts handle Ctrl+Z
     const description = canvasUndo();
     if (description) {
       showToast(`Undo: ${description}`);

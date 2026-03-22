@@ -526,7 +526,7 @@ function handleMouseUp(e: MouseEvent): void {
   isShiftClick = false;
 }
 
-async function selectElement(el: HTMLElement): Promise<void> {
+async function selectElement(el: HTMLElement, options?: { skipSidebar?: boolean }): Promise<void> {
   try {
     // Use ghost clone rect if selecting a moved element, otherwise use DOM element rect
     const displayRect = selectedGhost
@@ -562,8 +562,10 @@ async function selectElement(el: HTMLElement): Promise<void> {
       selectionLabel.innerHTML = `<span class="comp-name">${resolved.componentName}</span>${pathText ? `<span class="comp-path">${pathText}</span>` : ""}`;
     }
 
-    // Notify property controller of new selection
-    inspect(el, currentSelection);
+    // Notify property controller of new selection (opens sidebar) — skip in move tool mode
+    if (!options?.skipSidebar) {
+      inspect(el, currentSelection);
+    }
 
     // Update action bar component detail
     updateComponentDetail({
@@ -922,6 +924,11 @@ export function setEnabled(enabled: boolean): void {
 
 export function getSelectedElement(): HTMLElement | null {
   return selectedElement ?? null;
+}
+
+/** Select an element with highlight but without opening property sidebar (for move tool) */
+export async function selectElementForMove(el: HTMLElement): Promise<void> {
+  await selectElement(el, { skipSidebar: true });
 }
 
 /** Update selection to track a ghost's position (call after drop) */

@@ -188,7 +188,7 @@ export interface ComponentRef {
   lineNumber: number;
 }
 
-export type ToolType = "pointer" | "grab" | "move" | "draw" | "color" | "text";
+export type ToolType = "pointer" | "grab" | "move" | "draw" | "text";
 
 export interface DrawAnnotation {
   type: "draw";

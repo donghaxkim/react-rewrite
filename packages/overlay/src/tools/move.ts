@@ -1,22 +1,25 @@
 // packages/overlay/src/tools/move.ts
 import type { ToolEventHandler } from "../interaction.js";
-import { getSelection, getSelectedElement, trackGhostAfterDrop } from "../selection.js";
-import { setActiveTool, getGhosts, moveGhost, hasGhostForElement, viewportToPage } from "../canvas-state.js";
+import { getSelection, getSelectedElement, selectElementForMove, trackGhostAfterDrop } from "../selection.js";
+import { getGhosts, moveGhost, hasGhostForElement, viewportToPage } from "../canvas-state.js";
 import { createGhost, updateGhostPosition, findGhostAtPoint, setGhostDragging, setGhostSettled } from "../ghost-layer.js";
+import { getPageElementAtPoint } from "../interaction.js";
 import type { GhostEntry } from "../canvas-state.js";
 
 let dragTarget: GhostEntry | null = null;
 let dragOffset = { x: 0, y: 0 };
 let isDragging = false;
-let pendingSelect = false;
+// Pending click-to-select: store element to select on mouseUp if no drag occurs
+let pendingClickEl: HTMLElement | null = null;
 
 export const moveHandler: ToolEventHandler = {
   onMouseDown(e: MouseEvent) {
-    // Check if clicking an existing ghost
+    pendingClickEl = null;
+
+    // Check if clicking an existing ghost — start drag immediately
     const existingGhost = findGhostAtPoint(e.clientX, e.clientY);
     if (existingGhost) {
       dragTarget = existingGhost;
-
       const page = viewportToPage(e.clientX, e.clientY);
       dragOffset = {
         x: page.x - existingGhost.currentPos.x,
@@ -30,23 +33,23 @@ export const moveHandler: ToolEventHandler = {
     // Check if there's a current selection to create a ghost from
     const selection = getSelection();
     if (!selection) {
-      // No selection — temporarily switch to pointer to let user select
-      pendingSelect = true;
-      setActiveTool("pointer");
+      // No selection — find element at click point for click-to-select on mouseUp
+      const el = getPageElementAtPoint(e.clientX, e.clientY);
+      if (el) {
+        pendingClickEl = el;
+      }
       return;
     }
 
-    // Use the actual selected DOM element (not elementFromPoint which may hit wrong element)
+    // Use the actual selected DOM element
     const el = getSelectedElement();
     if (!el) return;
 
     // Prevent creating duplicate or nested ghosts for the same element
     if (hasGhostForElement(el)) {
-      // Find the existing ghost (exact match, parent, or child) and drag it instead
       for (const ghost of getGhosts().values()) {
         if (ghost.originalEl === el || ghost.originalEl.contains(el) || el.contains(ghost.originalEl)) {
           dragTarget = ghost;
-
           const page = viewportToPage(e.clientX, e.clientY);
           dragOffset = {
             x: page.x - ghost.currentPos.x,
@@ -66,7 +69,6 @@ export const moveHandler: ToolEventHandler = {
     });
 
     dragTarget = ghost;
-
     const page = viewportToPage(e.clientX, e.clientY);
     dragOffset = {
       x: page.x - ghost.currentPos.x,
@@ -85,21 +87,19 @@ export const moveHandler: ToolEventHandler = {
   },
 
   onMouseUp(_e: MouseEvent) {
+    // Complete drag
     if (isDragging && dragTarget) {
       moveGhost(dragTarget.id, dragTarget.currentPos);
       setGhostSettled(dragTarget.id);
-      // Update selection highlight to follow the ghost's new position
       trackGhostAfterDrop(dragTarget);
     }
     dragTarget = null;
     isDragging = false;
+
+    // Click-to-select (no drag occurred) — select without sidebar
+    if (pendingClickEl) {
+      selectElementForMove(pendingClickEl);
+      pendingClickEl = null;
+    }
   },
 };
-
-/** Called when pointer mode selects something and we should switch back to move */
-export function returnToMoveAfterSelect(): void {
-  if (pendingSelect) {
-    pendingSelect = false;
-    setActiveTool("move");
-  }
-}
