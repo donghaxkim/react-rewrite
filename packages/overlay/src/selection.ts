@@ -22,8 +22,8 @@ import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
-import { setHoverTarget, setSelectionTarget } from "./highlight-canvas.js";
-import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides } from "./properties/property-controller.js";
+import { setHoverTarget, setSelectionTarget, getHandleAtPoint, getSelectionGeometry, setDragOverrideRadius, type CornerHandle } from "./highlight-canvas.js";
+import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
 import { findGhostAtPoint } from "./ghost-layer.js";
 import type { GhostEntry } from "./canvas-state.js";
 
@@ -157,10 +157,14 @@ let selectionLabel: HTMLDivElement | null = null;
 let marqueeBox: HTMLDivElement | null = null;
 
 // Interaction state machine
-type InteractionMode = "idle" | "pending" | "marquee" | "pending-drag" | "drag";
+type InteractionMode = "idle" | "pending" | "marquee" | "pending-drag" | "drag" | "radius-drag";
 let mode: InteractionMode = "idle";
 let mouseDownPos: { x: number; y: number } | null = null;
 let mouseDownElement: HTMLElement | null = null;
+
+// Border-radius drag state
+let radiusDragCorner: CornerHandle | null = null;
+let radiusDragInitialRadius = 0;
 
 // Drag callbacks — set by drag.ts via setDragCallbacks
 let onDragStartCallback: ((e: MouseEvent, el: HTMLElement, selection: ComponentInfo) => void) | null = null;
@@ -269,6 +273,21 @@ function handleMouseDown(e: MouseEvent): void {
   const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
   if (el?.closest("#sketch-ui-root")) return;
 
+  // Check if clicking on a border-radius corner handle
+  if (currentSelection && selectedElement) {
+    const handle = getHandleAtPoint(e.clientX, e.clientY);
+    if (handle) {
+      e.preventDefault();
+      e.stopPropagation();
+      const geo = getSelectionGeometry();
+      radiusDragCorner = handle;
+      radiusDragInitialRadius = geo?.borderRadius ?? 0;
+      mouseDownPos = { x: e.clientX, y: e.clientY };
+      mode = "radius-drag";
+      return;
+    }
+  }
+
   e.preventDefault();
   e.stopPropagation();
 
@@ -311,6 +330,32 @@ function handleMouseDown(e: MouseEvent): void {
 function handleMouseMove(e: MouseEvent): void {
   if (!isActive) return;
 
+  // Border-radius drag — compute new radius from mouse distance to corner
+  if (mode === "radius-drag" && radiusDragCorner && mouseDownPos) {
+    e.preventDefault();
+    e.stopPropagation();
+    const geo = getSelectionGeometry();
+    if (!geo) return;
+
+    // Find the actual corner point of the rect
+    const cornerX = (radiusDragCorner === "tl" || radiusDragCorner === "bl") ? geo.x : geo.x + geo.w;
+    const cornerY = (radiusDragCorner === "tl" || radiusDragCorner === "tr") ? geo.y : geo.y + geo.h;
+
+    // Distance from mouse to corner — use the minimum of dx, dy for diagonal feel
+    const dx = Math.abs(e.clientX - cornerX);
+    const dy = Math.abs(e.clientY - cornerY);
+    const dist = Math.min(dx, dy);
+
+    // Clamp to valid range
+    const maxRadius = Math.min(geo.w / 2, geo.h / 2);
+    const newRadius = Math.round(Math.min(Math.max(dist, 0), maxRadius));
+
+    // Live preview via property controller + visual update on canvas
+    preview("borderRadius", `${newRadius}px`);
+    setDragOverrideRadius(newRadius);
+    return;
+  }
+
   if (mode === "pending" && mouseDownPos) {
     const dx = Math.abs(e.clientX - mouseDownPos.x);
     const dy = Math.abs(e.clientY - mouseDownPos.y);
@@ -334,6 +379,17 @@ function handleMouseMove(e: MouseEvent): void {
 
   // Hover highlight (only when idle — no mouse button down)
   if (mode === "idle") {
+    // Show resize cursor when hovering over a corner handle
+    if (currentSelection && selectedElement) {
+      const handle = getHandleAtPoint(e.clientX, e.clientY);
+      if (handle) {
+        document.body.style.cursor = (handle === "tl" || handle === "br") ? "nwse-resize" : "nesw-resize";
+        return;
+      } else {
+        document.body.style.cursor = "";
+      }
+    }
+
     // Check ghosts first — moved elements should be hoverable at their new position
     const ghost = findGhostAtPoint(e.clientX, e.clientY);
     if (ghost) {
@@ -359,6 +415,16 @@ function handleMouseUp(e: MouseEvent): void {
 
   const prevMode = mode;
   mode = "idle";
+
+  // Commit border-radius change
+  if (prevMode === "radius-drag") {
+    document.body.style.cursor = "";
+    setDragOverrideRadius(null);
+    radiusDragCorner = null;
+    mouseDownPos = null;
+    scheduledCommit();
+    return;
+  }
 
   if (prevMode === "marquee" && mouseDownPos) {
     if (marqueeBox) marqueeBox.style.display = "none";
@@ -600,6 +666,9 @@ export function clearSelection(): void {
   currentSelection = null;
   selectedElement = null;
   selectedGhost = null;
+  radiusDragCorner = null;
+  setDragOverrideRadius(null);
+  document.body.style.cursor = "";
   setSelectionTarget(null);
   if (selectionLabel) {
     selectionLabel.classList.remove("visible");

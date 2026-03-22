@@ -39,6 +39,26 @@ const ACCENT = COLORS.accent;
 const ACCENT_SOFT = "rgba(162,89,255,0.08)";
 const ACCENT_MEDIUM = "rgba(162,89,255,0.15)";
 
+// Corner handle constants
+const HANDLE_RADIUS = 4;
+const HANDLE_HIT_RADIUS = 10;
+const HANDLE_FILL = "#ffffff";
+const HANDLE_STROKE = ACCENT;
+const HANDLE_STROKE_WIDTH = 1.5;
+
+// Whether to show border-radius handles (only in pointer mode with a selection)
+let handlesVisible = true;
+// Override radius while dragging (null = use element's computed radius)
+let dragOverrideRadius: number | null = null;
+
+export type CornerHandle = "tl" | "tr" | "br" | "bl";
+
+interface HandlePosition {
+  corner: CornerHandle;
+  x: number;
+  y: number;
+}
+
 // ─── Public API ──────────────────────────────────────────
 
 export function initHighlightCanvas(): void {
@@ -102,9 +122,49 @@ export function setSelectionTarget(rect: DOMRect | null, borderRadius: number = 
   scheduleFrame();
 }
 
+export function setHandlesVisible(visible: boolean): void {
+  handlesVisible = visible;
+  scheduleFrame();
+}
+
+export function setDragOverrideRadius(radius: number | null): void {
+  dragOverrideRadius = radius;
+  if (selectionAnim && radius !== null) {
+    selectionAnim.borderRadius = radius;
+  }
+  scheduleFrame();
+}
+
+/**
+ * Returns the corner handle at the given viewport point, or null.
+ * Uses HANDLE_HIT_RADIUS for generous hit area.
+ */
+export function getHandleAtPoint(px: number, py: number): CornerHandle | null {
+  if (!handlesVisible || !selectionAnim || selectionAnim.opacity < 0.5) return null;
+  const positions = getHandlePositions(selectionAnim);
+  for (const hp of positions) {
+    const dx = px - hp.x;
+    const dy = py - hp.y;
+    if (dx * dx + dy * dy <= HANDLE_HIT_RADIUS * HANDLE_HIT_RADIUS) {
+      return hp.corner;
+    }
+  }
+  return null;
+}
+
+/**
+ * Returns the current selection rect geometry for drag calculations.
+ */
+export function getSelectionGeometry(): { x: number; y: number; w: number; h: number; borderRadius: number } | null {
+  if (!selectionAnim || selectionAnim.opacity < 0.5) return null;
+  const { x, y, w, h } = selectionAnim.current;
+  return { x, y, w, h, borderRadius: selectionAnim.borderRadius };
+}
+
 export function clearHighlights(): void {
   hoverAnim = null;
   selectionAnim = null;
+  dragOverrideRadius = null;
   scheduleFrame();
 }
 
@@ -171,7 +231,10 @@ function tick(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
   if (hoverAnim) drawRect(ctx, hoverAnim, ACCENT, ACCENT_SOFT);
-  if (selectionAnim) drawRect(ctx, selectionAnim, ACCENT, ACCENT_MEDIUM);
+  if (selectionAnim) {
+    drawRect(ctx, selectionAnim, ACCENT, ACCENT_MEDIUM);
+    if (handlesVisible) drawHandles(ctx, selectionAnim);
+  }
 
   if (needsMore) rafId = requestAnimationFrame(tick);
 }
@@ -228,6 +291,45 @@ function drawRect(
   c.strokeStyle = strokeColor;
   c.lineWidth = 1.5;
   c.stroke();
+
+  c.globalAlpha = 1;
+}
+
+/**
+ * Computes corner handle positions for the given animated rect.
+ * Each handle sits at (corner + borderRadius inward diagonally).
+ */
+function getHandlePositions(anim: AnimatedRect): HandlePosition[] {
+  const { x, y, w, h } = anim.current;
+  const r = Math.min(anim.borderRadius, w / 2, h / 2);
+  return [
+    { corner: "tl", x: x + r, y: y + r },
+    { corner: "tr", x: x + w - r, y: y + r },
+    { corner: "br", x: x + w - r, y: y + h - r },
+    { corner: "bl", x: x + r, y: y + h - r },
+  ];
+}
+
+/**
+ * Draws small circular handles at the corners of the selection rect.
+ * Handle position moves inward as border-radius increases.
+ */
+function drawHandles(c: CanvasRenderingContext2D, anim: AnimatedRect): void {
+  const { w, h } = anim.current;
+  if (w < 24 || h < 24) return; // Too small for handles
+
+  c.globalAlpha = anim.opacity;
+  const positions = getHandlePositions(anim);
+
+  for (const hp of positions) {
+    c.beginPath();
+    c.arc(hp.x, hp.y, HANDLE_RADIUS, 0, Math.PI * 2);
+    c.fillStyle = HANDLE_FILL;
+    c.fill();
+    c.strokeStyle = HANDLE_STROKE;
+    c.lineWidth = HANDLE_STROKE_WIDTH;
+    c.stroke();
+  }
 
   c.globalAlpha = 1;
 }
