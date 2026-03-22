@@ -143,32 +143,6 @@ export const BACKGROUND_DESCRIPTORS: PropertyDescriptor[] = [
   { key: "backgroundColor", label: "Color", group: "background", controlType: "color-swatch", cssProperty: "background-color", tailwindPrefix: "bg", tailwindScale: "colors", defaultValue: "transparent" },
 ];
 
-// --- Border ---
-export const BORDER_DESCRIPTORS: PropertyDescriptor[] = [
-  { key: "borderWidth", label: "Width", group: "border", controlType: "number-scrub", cssProperty: "border-width", tailwindPrefix: "border", tailwindScale: "borderWidth", defaultValue: "0", min: 0, classPattern: "^border-(\\d+|\\[.+\\])$" },
-  { key: "borderColor", label: "Color", group: "border", controlType: "color-swatch", cssProperty: "border-color", tailwindPrefix: "border", tailwindScale: "colors", defaultValue: "#000000", classPattern: "^border-(\\w+-\\d+|black|white|transparent|current|inherit|\\[.+\\])$" },
-  {
-    key: "borderStyle", label: "Style", group: "border", controlType: "segmented", cssProperty: "border-style", tailwindPrefix: "border", tailwindScale: "borderStyle", defaultValue: "none",
-    classPattern: "^border-(solid|dashed|dotted|double|none)$",
-    enumValues: [
-      { value: "solid", tailwindValue: "solid", label: "Solid" },
-      { value: "dashed", tailwindValue: "dashed", label: "Dashed" },
-      { value: "dotted", tailwindValue: "dotted", label: "Dotted" },
-      { value: "none", tailwindValue: "none", label: "None" },
-    ],
-  },
-  { key: "borderRadius", label: "Radius", group: "border", controlType: "number-scrub", cssProperty: "border-radius", tailwindPrefix: "rounded", tailwindScale: "borderRadius", defaultValue: "0", min: 0 },
-  { key: "borderTopLeftRadius", label: "TL", group: "border", controlType: "number-scrub", cssProperty: "border-top-left-radius", tailwindPrefix: "rounded-tl", tailwindScale: "borderRadius", relatedPrefixes: ["rounded", "rounded-t", "rounded-l"], defaultValue: "0", min: 0 },
-  { key: "borderTopRightRadius", label: "TR", group: "border", controlType: "number-scrub", cssProperty: "border-top-right-radius", tailwindPrefix: "rounded-tr", tailwindScale: "borderRadius", relatedPrefixes: ["rounded", "rounded-t", "rounded-r"], defaultValue: "0", min: 0 },
-  { key: "borderBottomRightRadius", label: "BR", group: "border", controlType: "number-scrub", cssProperty: "border-bottom-right-radius", tailwindPrefix: "rounded-br", tailwindScale: "borderRadius", relatedPrefixes: ["rounded", "rounded-b", "rounded-r"], defaultValue: "0", min: 0 },
-  { key: "borderBottomLeftRadius", label: "BL", group: "border", controlType: "number-scrub", cssProperty: "border-bottom-left-radius", tailwindPrefix: "rounded-bl", tailwindScale: "borderRadius", relatedPrefixes: ["rounded", "rounded-b", "rounded-l"], defaultValue: "0", min: 0 },
-];
-
-// --- Effects ---
-export const EFFECTS_DESCRIPTORS: PropertyDescriptor[] = [
-  { key: "opacity", label: "Opacity", group: "effects", controlType: "slider", cssProperty: "opacity", tailwindPrefix: "opacity", tailwindScale: "opacity", defaultValue: "1", min: 0, max: 100 },
-];
-
 // All descriptors in group order
 export const ALL_DESCRIPTORS: PropertyDescriptor[] = [
   ...LAYOUT_DESCRIPTORS,
@@ -176,6 +150,4 @@ export const ALL_DESCRIPTORS: PropertyDescriptor[] = [
   ...SIZE_DESCRIPTORS,
   ...TYPOGRAPHY_DESCRIPTORS,
   ...BACKGROUND_DESCRIPTORS,
-  ...BORDER_DESCRIPTORS,
-  ...EFFECTS_DESCRIPTORS,
 ];

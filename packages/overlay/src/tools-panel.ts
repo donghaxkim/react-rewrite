@@ -13,7 +13,6 @@ const ICONS = {
   draw: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
   color: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22l1-1h3l9-9"/><path d="M13 7l-1.3-1.3a1 1 0 0 0-1.4 0L9 7"/><path d="M16 10l1.3 1.3a1 1 0 0 1 0 1.4L16 14"/><path d="m9 7 6 6"/><path d="M20 2a2.83 2.83 0 0 1 0 4L16 10"/></svg>`,
   text: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>`,
-  lasso: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4c-4.42 0-8 2.24-8 5 0 1.72 1.3 3.24 3.3 4.2"/><path d="M12 4c4.42 0 8 2.24 8 5 0 2.76-3.58 5-8 5"/><path d="M7.3 13.2C5.71 14.08 5 15.27 5 16.5c0 2.49 3.13 4.5 7 4.5s7-2.01 7-4.5c0-1.23-.71-2.42-2.3-3.3"/></svg>`,
   canvas: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>`,
   undo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18c3.87 0 7-3.13 7-7s-3.13-7-7-7H4"/><polyline points="8 10 4 6 8 2"/></svg>`,
   reset: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>`,
@@ -29,7 +28,6 @@ const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: 
   { type: "draw", icon: ICONS.draw, label: "Draw", shortcut: "D" },
   { type: "color", icon: ICONS.color, label: "Color", shortcut: "E" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
-  { type: "lasso", icon: ICONS.lasso, label: "Lasso", shortcut: "L" },
 ];
 
 const PANEL_STYLES = `
@@ -188,7 +186,7 @@ const PANEL_STYLES = `
     color: ${COLORS.textPrimary};
     box-shadow: ${SHADOWS.sm};
   }
-  .clear-btn {
+  .action-btn {
     width: 32px;
     height: 32px;
     display: flex;
@@ -200,13 +198,22 @@ const PANEL_STYLES = `
     cursor: pointer;
     border-radius: 50%;
     padding: 0;
-    transition: background ${TRANSITIONS.fast}, color ${TRANSITIONS.fast};
+    transition: background ${TRANSITIONS.fast}, color ${TRANSITIONS.fast}, opacity ${TRANSITIONS.fast};
   }
-  .clear-btn svg {
+  .action-btn svg {
     width: 18px;
     height: 18px;
   }
-  .clear-btn:hover {
+  .action-btn:hover {
+    background: ${COLORS.bgSecondary};
+    color: ${COLORS.textPrimary};
+  }
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+    pointer-events: none;
+  }
+  .action-btn.danger:hover {
     background: ${COLORS.dangerSoft};
     color: ${COLORS.danger};
   }
@@ -345,7 +352,6 @@ export function initToolsPanel(): void {
     ["pointer", "grab"],
     ["move"],
     ["draw", "color", "text"],
-    ["lasso"],
   ];
 
   for (let gi = 0; gi < groups.length; gi++) {
@@ -387,7 +393,7 @@ export function initToolsPanel(): void {
   panelEl.appendChild(bottomDivider);
 
   canvasUndoBtn = document.createElement("button");
-  canvasUndoBtn.className = "clear-btn";
+  canvasUndoBtn.className = "action-btn";
   canvasUndoBtn.innerHTML = ICONS.undo;
   canvasUndoBtn.title = "Undo (Ctrl+Z)";
   canvasUndoBtn.disabled = true;
@@ -395,14 +401,14 @@ export function initToolsPanel(): void {
   panelEl.appendChild(canvasUndoBtn);
 
   const clearBtn = document.createElement("button");
-  clearBtn.className = "clear-btn";
+  clearBtn.className = "action-btn danger";
   clearBtn.innerHTML = ICONS.reset;
   clearBtn.title = "Reset Canvas";
   clearBtn.addEventListener("click", () => { if (onClearAll) onClearAll(); });
   panelEl.appendChild(clearBtn);
 
   const canvasBtn = document.createElement("button");
-  canvasBtn.className = "clear-btn";
+  canvasBtn.className = "action-btn";
   canvasBtn.innerHTML = ICONS.canvas;
   canvasBtn.title = "Toggle Infinite Canvas";
   canvasBtn.addEventListener("click", () => {

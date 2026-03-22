@@ -3,7 +3,6 @@ import type { PropertyControl, OnPreview, OnCommit } from "./controls/types.js";
 import { createNumberScrub } from "./controls/number-scrub.js";
 import { createSegmented } from "./controls/segmented.js";
 import { createColorSwatch } from "./controls/color-swatch.js";
-import { createSlider } from "./controls/slider.js";
 import { createBoxModel } from "./controls/box-model.js";
 import { COLORS, FONT_FAMILY, RADII, TRANSITIONS } from "../design-tokens.js";
 
@@ -38,8 +37,6 @@ const GROUP_LABELS: Record<PropertyGroup, string> = {
   size: "Size",
   typography: "Typography",
   background: "Background",
-  border: "Border",
-  effects: "Effects",
 };
 
 type ControlFactory = (
@@ -53,7 +50,6 @@ const CONTROL_FACTORIES: Record<string, ControlFactory> = {
   "number-scrub": createNumberScrub,
   "segmented": createSegmented,
   "color-swatch": createColorSwatch,
-  "slider": createSlider,
   "box-model": createBoxModel,
 };
 

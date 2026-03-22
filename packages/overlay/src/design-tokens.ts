@@ -92,8 +92,3 @@ export function drawCursorSvg(brushSize: number): string {
 export function colorCursorSvg(): string {
   return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${COLORS.accent}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 22l1-1h3l9-9'/><path d='M13 7l-1.3-1.3a1 1 0 0 0-1.4 0L9 7'/><path d='M16 10l1.3 1.3a1 1 0 0 1 0 1.4L16 14'/><path d='m9 7 6 6'/><path d='M20 2a2.83 2.83 0 0 1 0 4L16 10'/></svg>`)}") 2 22, pointer`;
 }
-
-/** Lasso tool cursor: small crosshair dot */
-export function lassoCursorSvg(): string {
-  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'><line x1='8' y1='2' x2='8' y2='14' stroke='${COLORS.accent}' stroke-width='1'/><line x1='2' y1='8' x2='14' y2='8' stroke='${COLORS.accent}' stroke-width='1'/></svg>`)}") 8 8, crosshair`;
-}

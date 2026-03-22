@@ -18,7 +18,7 @@ const FLEX_DISPLAYS = new Set(["flex", "inline-flex"]);
 const ESSENTIAL_GROUPS: Set<PropertyGroup> = new Set(["layout", "spacing", "size"]);
 
 // Groups whose CSS properties are deferred until the section is expanded
-const DEFERRED_GROUPS: Set<PropertyGroup> = new Set(["typography", "background", "border", "effects"]);
+const DEFERRED_GROUPS: Set<PropertyGroup> = new Set(["typography", "background"]);
 
 // Timeout for commit result — if no response arrives, assume success
 const COMMIT_RESULT_TIMEOUT_MS = 5_000;

@@ -23,7 +23,6 @@ import { moveHandler, returnToMoveAfterSelect } from "./tools/move.js";
 import { drawHandler } from "./tools/draw.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { colorHandler, cleanupColorTool } from "./tools/color.js";
-import { lassoHandler, clearLassoSelection } from "./tools/lasso.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 
 declare global {
@@ -74,7 +73,6 @@ function init(): void {
   registerToolHandler("draw", drawHandler);
   registerToolHandler("text", textHandler);
   registerToolHandler("color", colorHandler);
-  registerToolHandler("lasso", lassoHandler);
 
   // Tool change listener — handles mode switching
   onToolChange((tool, prev) => {
@@ -84,7 +82,6 @@ function init(): void {
     if (prev === "pointer") deactivatePointer();
     if (prev === "text") cleanupTextTool();
     if (prev === "color") cleanupColorTool();
-    if (prev === "lasso") clearLassoSelection();
 
     // Clear caches on tool switch
     clearElementCache();
@@ -156,7 +153,7 @@ function init(): void {
         // (#6) Clear selection first (closes sidebar, avoids stale refs after HMR)
         clearSelection();
         clearAnnotationLayer();
-        clearLassoSelection();
+
         resetCanvas();
       } else {
         showToast(`Error: ${msg.error || "Generation failed"}`);
@@ -181,7 +178,6 @@ function init(): void {
   setOnClearAll(() => {
     clearSelection();
     clearAnnotationLayer();
-    clearLassoSelection();
     resetCanvas();
     resetCanvasTransform();
     showToast("Canvas cleared");

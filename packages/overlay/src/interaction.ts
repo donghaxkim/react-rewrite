@@ -1,6 +1,6 @@
 // packages/overlay/src/interaction.ts
 import { getActiveTool, getToolOptions } from "./canvas-state.js";
-import { moveCursorSvg, drawCursorSvg, colorCursorSvg, lassoCursorSvg } from "./design-tokens.js";
+import { moveCursorSvg, drawCursorSvg, colorCursorSvg } from "./design-tokens.js";
 import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
 import { handleWheelZoom } from "./canvas-transform.js";
 
@@ -75,7 +75,6 @@ function updateCursor(tool: string): void {
     case "draw": interactionEl.style.cursor = drawCursorSvg(getToolOptions().brushSize); break;
     case "color": interactionEl.style.cursor = colorCursorSvg(); break;
     case "text": interactionEl.style.cursor = "text"; break;
-    case "lasso": interactionEl.style.cursor = lassoCursorSvg(); break;
     default: interactionEl.style.cursor = "default";
   }
 }

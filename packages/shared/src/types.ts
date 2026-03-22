@@ -106,8 +106,8 @@ export interface SiblingInfo {
 
 // --- Property Inspector Types ---
 
-export type ControlType = "number-scrub" | "segmented" | "color-swatch" | "slider" | "box-model";
-export type PropertyGroup = "layout" | "spacing" | "size" | "typography" | "background" | "border" | "effects";
+export type ControlType = "number-scrub" | "segmented" | "color-swatch" | "box-model";
+export type PropertyGroup = "layout" | "spacing" | "size" | "typography" | "background";
 
 export interface PropertyDescriptor {
   key: string;
@@ -188,7 +188,7 @@ export interface ComponentRef {
   lineNumber: number;
 }
 
-export type ToolType = "pointer" | "grab" | "move" | "draw" | "color" | "text" | "lasso";
+export type ToolType = "pointer" | "grab" | "move" | "draw" | "color" | "text";
 
 export interface DrawAnnotation {
   type: "draw";
