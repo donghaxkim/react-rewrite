@@ -1,10 +1,8 @@
 import type { ToolEventHandler } from "../interaction.js";
 import type { MoveEntry } from "../move-state.js";
 import {
-  createPlaceholder,
   applyDragVisual,
   settleDragVisual,
-  isOutOfFlow,
 } from "../move-state.js";
 import {
   addMove,
@@ -75,17 +73,11 @@ export const moveHandler: ToolEventHandler = {
     }
 
     // Create new move
+    // No placeholder needed — position:relative + transform:translate() visually
+    // moves the element while its original layout space is naturally preserved.
     const originalRect = selectedEl.getBoundingClientRect();
     const originalCssText = selectedEl.style.cssText;
     const existingTransform = getComputedStyle(selectedEl).transform;
-    const outOfFlow = isOutOfFlow(selectedEl);
-
-    let placeholder: HTMLElement | null = null;
-    if (!outOfFlow) {
-      placeholder = createPlaceholder(selectedEl);
-      selectedEl.parentNode?.insertBefore(placeholder, selectedEl);
-      selectedEl.style.position = "relative";
-    }
 
     const entry: MoveEntry = {
       id: crypto.randomUUID(),
@@ -95,7 +87,7 @@ export const moveHandler: ToolEventHandler = {
         lineNumber: selection.lineNumber,
       },
       element: selectedEl,
-      placeholder,
+      placeholder: null,
       originalRect,
       delta: { dx: 0, dy: 0 },
       originalCssText,

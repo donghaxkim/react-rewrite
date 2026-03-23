@@ -10,8 +10,6 @@ import {
   reacquireMovedElement,
   reacquireMovedElementAsync,
   applyMoveTransform,
-  createPlaceholder,
-  isOutOfFlow,
 } from "./move-state.js";
 import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, setOnCanvasUndo as setOnCanvasUndoPanel, updateCanvasUndoButton, flashToolButton } from "./tools-panel.js";
 import { initInteraction, destroyInteraction, activateInteraction, registerToolHandler } from "./interaction.js";
@@ -155,11 +153,6 @@ let moveObserver: MutationObserver | null = null;
 function restoreMoveToElement(id: string, entry: MoveEntry, newEl: HTMLElement): void {
   entry.originalCssText = newEl.style.cssText;
   entry.element = newEl;
-  if (!isOutOfFlow(newEl) && !entry.placeholder?.parentNode) {
-    entry.placeholder = createPlaceholder(newEl);
-    newEl.parentNode?.insertBefore(entry.placeholder, newEl);
-    newEl.style.position = "relative";
-  }
   applyMoveTransform(entry);
 }
 
