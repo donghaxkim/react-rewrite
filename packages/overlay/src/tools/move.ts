@@ -135,6 +135,8 @@ export const moveHandler: ToolEventHandler = {
         updateMoveDelta(dragEntry.id, dragEntry.delta, preDragDelta);
       }
       settleDragVisual(dragEntry);
+      // Re-select at new position so highlight tracks the moved element
+      selectElementForMove(dragEntry.element);
     }
 
     dragEntry = null;

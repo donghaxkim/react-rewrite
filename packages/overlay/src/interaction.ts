@@ -2,6 +2,7 @@
 import { getActiveTool, getToolOptions } from "./canvas-state.js";
 import { moveCursorSvg, drawCursorSvg } from "./design-tokens.js";
 import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
+import { isFullPageElement } from "./utils/component-filter.js";
 import { handleWheelZoom } from "./canvas-transform.js";
 
 export type ToolEventHandler = {
@@ -115,6 +116,7 @@ export function getPageElementAtPoint(clientX: number, clientY: number): HTMLEle
     if (el.hasAttribute("data-frameup-interaction")) continue;
     if (el.hasAttribute("data-frameup-placeholder")) continue;
     if (el === document.body || el === document.documentElement) continue;
+    if (isFullPageElement(el)) continue;
     result = el;
     break;
   }
