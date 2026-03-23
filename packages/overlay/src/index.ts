@@ -5,7 +5,14 @@ import { initSelection, deactivateSelection, clearSelection } from "./selection.
 import { initHighlightCanvas, destroyHighlightCanvas } from "./highlight-canvas.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
-import { initGhostLayer, destroyGhostLayer, updateGhostPosition } from "./ghost-layer.js";
+import type { MoveEntry } from "./move-state.js";
+import {
+  reacquireMovedElement,
+  reacquireMovedElementAsync,
+  applyMoveTransform,
+  createPlaceholder,
+  isOutOfFlow,
+} from "./move-state.js";
 import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, setOnCanvasUndo as setOnCanvasUndoPanel, updateCanvasUndoButton, flashToolButton } from "./tools-panel.js";
 import { initInteraction, destroyInteraction, activateInteraction, registerToolHandler } from "./interaction.js";
 import { clearElementCache } from "./utils/element-cache.js";
@@ -14,7 +21,8 @@ import { showOnboardingHint, dismissOnboarding } from "./onboarding.js";
 import {
   onToolChange, onStateChange, getActiveTool, setActiveTool,
   canvasUndo, canUndo, resetCanvas, hasChanges, serializeAnnotations,
-  getOriginalsHidden, setOriginalsHidden, onAnnotationRemoved, onGhostPositionUpdate,
+  getOriginalsHidden, setOriginalsHidden, onAnnotationRemoved,
+  getMoves, removeMove,
 } from "./canvas-state.js";
 import { initPropertyController } from "./properties/property-controller.js";
 import { activatePointer, deactivatePointer } from "./tools/pointer.js";
@@ -142,6 +150,19 @@ function installGlobalErrorHandlers(): void {
   });
 }
 
+let moveObserver: MutationObserver | null = null;
+
+function restoreMoveToElement(id: string, entry: MoveEntry, newEl: HTMLElement): void {
+  entry.originalCssText = newEl.style.cssText;
+  entry.element = newEl;
+  if (!isOutOfFlow(newEl) && !entry.placeholder?.parentNode) {
+    entry.placeholder = createPlaceholder(newEl);
+    newEl.parentNode?.insertBefore(entry.placeholder, newEl);
+    newEl.style.position = "relative";
+  }
+  applyMoveTransform(entry);
+}
+
 function init(): void {
   const wsPort = window.__FRAMEUP_WS_PORT__;
   if (!wsPort) {
@@ -167,12 +188,36 @@ function init(): void {
 
   // Phase 2A layers
   initAnnotationLayer();
-  initGhostLayer();
 
   // Wire annotation removal from undo to SVG layer cleanup
   onAnnotationRemoved((id) => removeAnnotationElement(id));
-  // Wire ghost position updates from undo to ghost-layer (handles wrapper vs body positioning)
-  onGhostPositionUpdate((id, x, y) => updateGhostPosition(id, x, y));
+
+  // HMR survival for moved elements
+  moveObserver = new MutationObserver(() => {
+    for (const [id, entry] of getMoves()) {
+      if (!document.contains(entry.element)) {
+        setTimeout(() => {
+          // Try sync reacquisition first
+          let newEl = reacquireMovedElement(entry.identity);
+          if (newEl) {
+            restoreMoveToElement(id, entry, newEl);
+            return;
+          }
+          // Try async reacquisition
+          reacquireMovedElementAsync(entry.identity).then((asyncEl) => {
+            if (asyncEl) {
+              restoreMoveToElement(id, entry, asyncEl);
+            } else {
+              removeMove(id);
+              showToast(`Component ${entry.componentRef.componentName} removed — move cleared`);
+            }
+          });
+        }, 80);
+      }
+    }
+  });
+
+  moveObserver.observe(document.body, { childList: true, subtree: true });
   initToolsPanel();
   initInteraction();
   showOnboardingHint();
@@ -213,7 +258,7 @@ function init(): void {
     if (description) showToast(`Undo: ${description}`);
   });
 
-  // Eye toggle — only works when ghosts exist
+  // Eye toggle — only works when moves exist
   setOnEyeToggle(() => {
     if (!hasChanges()) {
       showToast("No moved components to toggle");
@@ -301,7 +346,7 @@ function close(): void {
   destroyHighlightCanvas();
   deactivateDrag();
   destroyAnnotationLayer();
-  destroyGhostLayer();
+  moveObserver?.disconnect();
   destroyToolsPanel();
   destroyInteraction();
   resetCanvas();
