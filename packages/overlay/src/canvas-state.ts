@@ -81,7 +81,6 @@ export function getMoves(): Map<string, MoveEntry> {
 export function addMove(entry: MoveEntry): void {
   moves.set(entry.id, entry);
   pushUndoAction({ type: "moveCreate", moveId: entry.id });
-  notifyStateChange();
 }
 
 export function updateMoveDelta(id: string, delta: { dx: number; dy: number }, previousDelta: { dx: number; dy: number }): void {
@@ -90,7 +89,6 @@ export function updateMoveDelta(id: string, delta: { dx: number; dy: number }, p
   entry.delta = delta;
   applyMoveTransform(entry);
   pushUndoAction({ type: "moveDelta", moveId: id, previousDelta });
-  notifyStateChange();
 }
 
 export function removeMove(id: string): void {
