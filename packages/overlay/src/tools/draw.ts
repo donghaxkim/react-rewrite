@@ -25,7 +25,7 @@ export const drawHandler: ToolEventHandler = {
     const page = viewportToPage(e.clientX, e.clientY);
     livePath.addPoint(page.x, page.y);
   },
-  async onMouseUp(_e: MouseEvent) {
+  onMouseUp(_e: MouseEvent) {
     if (!livePath) return;
     const points = livePath.getPoints();
     const opts = getToolOptions();
@@ -39,23 +39,26 @@ export const drawHandler: ToolEventHandler = {
       return;
     }
 
-    // Await the target component resolution (started on mousedown)
-    const startComponent = await startComponentPromise;
-
-    // Simplify and add as permanent annotation
+    // Simplify and add as permanent annotation synchronously
+    // so the undo stack is updated immediately (no race with Ctrl+Z)
     const simplified = simplifyPoints(points, 2);
     const id = crypto.randomUUID();
     addStrokePath(id, simplified, opts.brushColor, opts.brushSize);
-    addAnnotation({
+    const annotation: DrawAnnotation = {
       type: "draw",
       id,
       points: simplified,
       color: opts.brushColor,
       strokeWidth: opts.brushSize,
-      targetComponent: startComponent,
-    });
+      targetComponent: null,
+    };
+    addAnnotation(annotation);
+
+    // Patch targetComponent when async resolution completes (metadata only)
+    const pending = startComponentPromise;
+    startComponentPromise = null;
+    pending?.then(comp => { annotation.targetComponent = comp; });
 
     livePath = null;
-    startComponentPromise = null;
   },
 };
