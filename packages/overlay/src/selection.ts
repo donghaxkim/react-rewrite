@@ -24,8 +24,6 @@ import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMultiSelection, isMultiSelectActive, getHandleAtPoint, getSelectionGeometry, type CornerHandle } from "./highlight-canvas.js";
 import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
-import { findGhostAtPoint } from "./ghost-layer.js";
-import type { GhostEntry } from "./canvas-state.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -148,7 +146,6 @@ function resolveComponentSync(el: HTMLElement): ResolvedComponent | null {
 
 let currentSelection: ComponentInfo | null = null;
 let selectedElement: HTMLElement | null = null;
-let selectedGhost: GhostEntry | null = null; // non-null when selection is a moved ghost
 let isActive = false;
 let listenersAttached = false;
 
@@ -328,24 +325,12 @@ function handleMouseDown(e: MouseEvent): void {
   e.preventDefault();
   e.stopPropagation();
 
-  // Check if the user clicked on a moved ghost element first
-  const ghost = findGhostAtPoint(e.clientX, e.clientY);
-  if (ghost) {
-    if (!e.shiftKey) clearMultiSelectState();
-    mouseDownPos = { x: e.clientX, y: e.clientY };
-    mouseDownElement = ghost.originalEl;
-    selectedGhost = ghost;
-    mode = "pending";
-    return;
-  }
-
   if (!el || !isValidElement(el)) {
     // Clicking on empty/invalid area → save changes and deselect everything
     if (currentSelection || multiSelected.size > 0) {
       commitAndDeselect();
       currentSelection = null;
       selectedElement = null;
-      selectedGhost = null;
       clearMultiSelectState();
       setSelectionTarget(null);
       if (selectionLabel) {
@@ -359,7 +344,6 @@ function handleMouseDown(e: MouseEvent): void {
 
   mouseDownPos = { x: e.clientX, y: e.clientY };
   mouseDownElement = el;
-  selectedGhost = null;
   isShiftClick = e.shiftKey;
 
   // Always use "pending" mode — clicking selects, dragging does marquee.
@@ -457,15 +441,6 @@ function handleMouseMove(e: MouseEvent): void {
       }
     }
 
-    // Check ghosts first — moved elements should be hoverable at their new position
-    const ghost = findGhostAtPoint(e.clientX, e.clientY);
-    if (ghost) {
-      const rect = ghost.cloneEl.getBoundingClientRect();
-      const br = parseFloat(getComputedStyle(ghost.originalEl).borderRadius) || 4;
-      setHoverTarget(rect, br + 2);
-      return;
-    }
-
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
     if (!el || !isValidElement(el)) {
       setHoverTarget(null);
@@ -528,10 +503,7 @@ function handleMouseUp(e: MouseEvent): void {
 
 async function selectElement(el: HTMLElement, options?: { skipSidebar?: boolean }): Promise<void> {
   try {
-    // Use ghost clone rect if selecting a moved element, otherwise use DOM element rect
-    const displayRect = selectedGhost
-      ? selectedGhost.cloneEl.getBoundingClientRect()
-      : el.getBoundingClientRect();
+    const displayRect = el.getBoundingClientRect();
 
     // Show selection overlay with loading dots immediately, before async resolve
     selectedElement = el;
@@ -591,7 +563,6 @@ function performMarqueeSelect(x1: number, y1: number, x2: number, y2: number): v
   deselectProperty();
   currentSelection = null;
   selectedElement = null;
-  selectedGhost = null;
   setSelectionTarget(null);
   if (selectionLabel) {
     selectionLabel.classList.remove("visible");
@@ -827,10 +798,7 @@ function updateSelectionPosition(): void {
   }
 
   if (!selectedElement || !currentSelection) return;
-  // Use ghost clone rect if this selection is a moved element
-  const rect = selectedGhost
-    ? selectedGhost.cloneEl.getBoundingClientRect()
-    : selectedElement.getBoundingClientRect();
+  const rect = selectedElement.getBoundingClientRect();
   const br = parseFloat(getComputedStyle(selectedElement).borderRadius) || 4;
   setSelectionTarget(rect, br + 2);
 
@@ -860,7 +828,6 @@ export function clearSelection(): void {
   deselectProperty();
   currentSelection = null;
   selectedElement = null;
-  selectedGhost = null;
   resizeDragCorner = null;
   resizeInitialRect = null;
   multiResizeInitials = [];
@@ -929,11 +896,4 @@ export function getSelectedElement(): HTMLElement | null {
 /** Select an element with highlight but without opening property sidebar (for move tool) */
 export async function selectElementForMove(el: HTMLElement): Promise<void> {
   await selectElement(el, { skipSidebar: true });
-}
-
-/** Update selection to track a ghost's position (call after drop) */
-export function trackGhostAfterDrop(ghost: GhostEntry): void {
-  selectedGhost = ghost;
-  selectedElement = ghost.originalEl;
-  updateSelectionPosition();
 }
