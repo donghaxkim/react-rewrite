@@ -3,17 +3,8 @@ import type {
   ToolType, Annotation, DrawAnnotation, TextAnnotation, ColorOverride,
   ComponentRef, CanvasUndoAction, SerializedAnnotations,
 } from "@frameup/shared";
-
-export interface GhostEntry {
-  id: string;
-  componentRef: ComponentRef;
-  originalRect: { top: number; left: number; width: number; height: number };
-  currentPos: { x: number; y: number };
-  cloneEl: HTMLElement;
-  originalEl: HTMLElement;
-  originalOpacity: string;
-  originalVisibility: string;
-}
+import type { MoveEntry } from "./move-state.js";
+import { applyMoveTransform, clearMoveTransform } from "./move-state.js";
 
 /** Runtime extension of ColorOverride — adds the DOM element reference (not serializable). */
 export type ColorOverrideRuntime = ColorOverride & { targetElement: HTMLElement };
@@ -23,7 +14,7 @@ export type PropertyChangeRuntime = Extract<CanvasUndoAction, { type: "propertyC
   element: HTMLElement;
 };
 
-let ghosts: Map<string, GhostEntry> = new Map();
+let moves: Map<string, MoveEntry> = new Map();
 let annotations: Annotation[] = [];
 let undoStack: CanvasUndoAction[] = [];
 let activeTool: ToolType = "pointer";
@@ -81,32 +72,37 @@ export function setToolOption<K extends keyof typeof toolOptions>(key: K, value:
   toolOptions[key] = value;
 }
 
-// --- Ghosts ---
+// --- Moves ---
 
-export function getGhosts(): Map<string, GhostEntry> { return ghosts; }
+export function getMoves(): Map<string, MoveEntry> {
+  return moves;
+}
 
-export function addGhost(entry: GhostEntry): void {
-  ghosts.set(entry.id, entry);
-  undoStack.push({ type: "ghostCreate", ghostId: entry.id });
+export function addMove(entry: MoveEntry): void {
+  moves.set(entry.id, entry);
+  pushUndoAction({ type: "moveCreate", moveId: entry.id });
   notifyStateChange();
 }
 
-export function moveGhost(id: string, pos: { x: number; y: number }, previousPos?: { x: number; y: number }): void {
-  const ghost = ghosts.get(id);
-  if (!ghost) return;
-  const prev = previousPos ?? { ...ghost.currentPos };
-  ghost.currentPos = pos;
-  undoStack.push({ type: "ghostMove", ghostId: id, previousPos: prev });
+export function updateMoveDelta(id: string, delta: { dx: number; dy: number }, previousDelta: { dx: number; dy: number }): void {
+  const entry = moves.get(id);
+  if (!entry) return;
+  entry.delta = delta;
+  applyMoveTransform(entry);
+  pushUndoAction({ type: "moveDelta", moveId: id, previousDelta });
   notifyStateChange();
 }
 
-export function removeGhost(id: string): void {
-  const ghost = ghosts.get(id);
-  if (!ghost) return;
-  ghost.cloneEl.remove();
-  ghost.originalEl.style.opacity = ghost.originalOpacity;
-  ghost.originalEl.style.visibility = ghost.originalVisibility;
-  ghosts.delete(id);
+export function removeMove(id: string): void {
+  const entry = moves.get(id);
+  if (!entry) return;
+  // Restore original element state
+  entry.element.style.cssText = entry.originalCssText;
+  // Remove placeholder
+  if (entry.placeholder && entry.placeholder.parentNode) {
+    entry.placeholder.parentNode.removeChild(entry.placeholder);
+  }
+  moves.delete(id);
   notifyStateChange();
 }
 
@@ -136,11 +132,6 @@ export function onAnnotationRemoved(fn: (id: string) => void): void {
   annotationRemovedCallback = fn;
 }
 
-let ghostPositionCallback: ((id: string, pageX: number, pageY: number) => void) | null = null;
-export function onGhostPositionUpdate(fn: (id: string, pageX: number, pageY: number) => void): void {
-  ghostPositionCallback = fn;
-}
-
 export function removeAnnotation(id: string): void {
   annotations = annotations.filter(a => a.id !== id);
   annotationRemovedCallback?.(id);
@@ -153,27 +144,31 @@ export function getOriginalsHidden(): boolean { return originalsHidden; }
 
 export function setOriginalsHidden(hidden: boolean): void {
   originalsHidden = hidden;
-  for (const ghost of ghosts.values()) {
+  for (const entry of moves.values()) {
     if (hidden) {
-      ghost.originalEl.style.opacity = "0";
-      ghost.originalEl.style.visibility = "hidden";
+      // "Hidden" = transforms applied (moved state)
+      applyMoveTransform(entry);
     } else {
-      // Restore to dimmed state (ghost exists, so original stays dimmed)
-      ghost.originalEl.style.opacity = "0.3";
-      ghost.originalEl.style.visibility = "visible";
+      // "Visible" = transforms cleared (original positions)
+      clearMoveTransform(entry);
     }
   }
   notifyStateChange();
 }
 
-/** Check if an element already has a ghost clone */
-export function hasGhostForElement(el: HTMLElement): boolean {
-  for (const ghost of ghosts.values()) {
-    if (ghost.originalEl === el) return true;
-    // Prevent nested ghost: el is inside an existing ghost's original, or vice versa
-    if (ghost.originalEl.contains(el) || el.contains(ghost.originalEl)) return true;
+export function hasMoveForElement(el: HTMLElement): boolean {
+  for (const entry of moves.values()) {
+    if (entry.element === el) return true;
+    if (entry.element.contains(el) || el.contains(entry.element)) return true;
   }
   return false;
+}
+
+export function getMoveForElement(el: HTMLElement): MoveEntry | undefined {
+  for (const entry of moves.values()) {
+    if (entry.element === el) return entry;
+  }
+  return undefined;
 }
 
 // --- Undo ---
@@ -183,16 +178,14 @@ export function canvasUndo(): string | null {
   if (!action) return null;
 
   switch (action.type) {
-    case "ghostCreate": {
-      removeGhost(action.ghostId);
-      return "ghost removed";
-    }
-    case "ghostMove": {
-      const ghost = ghosts.get(action.ghostId);
-      if (ghost) {
-        ghost.currentPos = action.previousPos;
-        // Route DOM update through ghost-layer callback (handles wrapper vs body positioning)
-        ghostPositionCallback?.(action.ghostId, action.previousPos.x, action.previousPos.y);
+    case "moveCreate":
+      removeMove(action.moveId);
+      return "move removed";
+    case "moveDelta": {
+      const moveEntry = moves.get(action.moveId);
+      if (moveEntry) {
+        moveEntry.delta = action.previousDelta;
+        applyMoveTransform(moveEntry);
       }
       return "move reverted";
     }
@@ -267,10 +260,11 @@ export function pageToViewport(pageX: number, pageY: number): { x: number; y: nu
 // --- Reset ---
 
 export function resetCanvas(): void {
-  for (const ghost of ghosts.values()) {
-    ghost.cloneEl.remove();
-    ghost.originalEl.style.opacity = ghost.originalOpacity;
-    ghost.originalEl.style.visibility = ghost.originalVisibility;
+  for (const entry of moves.values()) {
+    entry.element.style.cssText = entry.originalCssText;
+    if (entry.placeholder && entry.placeholder.parentNode) {
+      entry.placeholder.parentNode.removeChild(entry.placeholder);
+    }
   }
   // Revert color overrides
   for (const ann of annotations) {
@@ -292,7 +286,7 @@ export function resetCanvas(): void {
       }
     }
   }
-  ghosts = new Map();
+  moves = new Map();
   annotations = [];
   undoStack = [];
   originalsHidden = true;
@@ -306,7 +300,7 @@ export function resetCanvas(): void {
 // --- Has Changes ---
 
 export function hasChanges(): boolean {
-  return ghosts.size > 0 || annotations.length > 0;
+  return moves.size > 0 || annotations.length > 0;
 }
 
 export function canUndo(): boolean {
@@ -316,16 +310,18 @@ export function canUndo(): boolean {
 // --- Serialization ---
 
 export function serializeAnnotations(): SerializedAnnotations {
-  const moves: SerializedAnnotations["moves"] = [];
-  for (const ghost of ghosts.values()) {
-    moves.push({
-      component: ghost.componentRef.componentName,
-      file: ghost.componentRef.filePath,
-      line: ghost.componentRef.lineNumber,
-      from: ghost.originalRect,
-      to: ghost.currentPos,
-    });
-  }
+  const serializedMoves = Array.from(moves.values()).map((entry) => ({
+    component: entry.componentRef.componentName,
+    file: entry.componentRef.filePath,
+    line: entry.componentRef.lineNumber,
+    originalRect: {
+      top: entry.originalRect.top,
+      left: entry.originalRect.left,
+      width: entry.originalRect.width,
+      height: entry.originalRect.height,
+    },
+    delta: { dx: entry.delta.dx, dy: entry.delta.dy },
+  }));
 
   const anns: SerializedAnnotations["annotations"] = [];
   const colorChanges: SerializedAnnotations["colorChanges"] = [];
@@ -362,5 +358,5 @@ export function serializeAnnotations(): SerializedAnnotations {
     }
   }
 
-  return { moves, annotations: anns, colorChanges };
+  return { moves: serializedMoves, annotations: anns, colorChanges };
 }
