@@ -53,6 +53,8 @@ element.style.transform = `translate(${dx}px, ${dy}px) ${existingTransform}`
 
 Where `existingTransform` is the original computed transform value (or empty string if `none`). The translate is prepended so it operates in screen space regardless of the element's existing rotation/scale.
 
+**Note on matrix representation:** `getComputedStyle().transform` returns a `matrix(...)` string, not the authored `rotate(45deg) scale(0.5)`. So during the move, the composed transform is `translate(dx, dy) matrix(...)` — visually identical but not human-readable. This is fine because: (a) undo restores the original `cssText` which preserves the authored form, and (b) the matrix is only used transiently during the move session.
+
 ### Why This Works for Property Panel
 
 The element is real. `getComputedStyle()` returns real values. Inline style changes are immediately visible. HMR updates flow through naturally. Zero changes needed to `property-sidebar.ts` or `property-controller.ts`.
@@ -122,9 +124,42 @@ Same UX intent (compare before/after), different implementation (remove/restore 
 
 If a parent element is moved and then a child within it is also moved, both get their own `MoveEntry`. The child's transform is relative to the parent's transformed position (CSS transforms nest naturally). The child's placeholder sits inside the parent. On undo, each is independent — undoing the child's move doesn't affect the parent, and undoing the parent's move leaves the child's relative offset intact.
 
+**Edge case with scaled parents:** The child's delta is captured in screen-space pixels (from mouse movement). If the parent has `scale(0.5)`, dragging the child 100px on screen produces `translate(100px, 0)` prepended before the parent's scale — visually correct during drag. But if the parent's move is later undone (removing the scale context), the child's 100px translate now operates in a different visual scale. This is an acceptable trade-off: the nested-move-then-partial-undo scenario is rare, and the user can re-drag the child to adjust.
+
 ## Scroll Containers
 
 `originalRect` is captured via `getBoundingClientRect()` (viewport-relative). During drag, the delta is computed from the initial mouse position, not from `originalRect`, so scroll changes during drag don't corrupt the delta. If the container scrolls between moves, the element's visual position changes but the stored delta remains correct — the transform is relative to the element's flow position, not absolute viewport coordinates.
+
+## HMR Survival
+
+When HMR replaces a component, the DOM element in `MoveEntry.element` goes stale. Without re-acquisition, all active moves silently break. The property controller already solves this problem via `ElementIdentity`-based re-acquisition — the move system uses the same pattern.
+
+### MoveEntry additions for HMR
+
+```typescript
+interface MoveEntry {
+  // ... existing fields ...
+  identity: ElementIdentity;     // { componentName, filePath, lineNumber, columnNumber, tagName }
+}
+```
+
+`identity` is captured at move creation time from the component's fiber metadata (same source as `property-controller.ts`).
+
+### Re-acquisition flow
+
+1. **Detect:** Use a MutationObserver on each moved element's parent. When the element is removed from the DOM, start a re-acquisition timer (80ms delay, matching property controller).
+2. **Find:** Walk the DOM looking for an element matching `identity` (same component name, file, line). Use the same `reacquireElement()` logic from property controller.
+3. **Restore:** If found:
+   - Update `entry.element` to the new DOM element
+   - Snapshot new `originalCssText` (HMR may have changed inline styles)
+   - Re-insert placeholder before the new element (if applicable)
+   - Re-apply the composed transform (`translate(delta) + existingTransform`)
+   - Re-apply `position: relative` if the element was static
+4. **Fail gracefully:** If not found after timeout, remove the `MoveEntry` and its placeholder. Show a toast: "Component [name] was removed — move annotation cleared."
+
+### Coordination with property controller
+
+Both systems observe the same element. To avoid duplicate observers, the move system hooks into the property controller's existing HMR observation when the moved element is also selected. When the element is not selected (no property panel open), the move system runs its own observer.
 
 ## Impact on Existing Code
 
@@ -143,7 +178,7 @@ If a parent element is moved and then a child within it is also moved, both get 
 | `selection.ts` | Remove `findGhostAtPoint()`, `selectedGhost` variable, and all ghost branching. Selection works naturally — `getBoundingClientRect()` accounts for CSS transforms automatically. |
 | `tools/move.ts` | **Full rewrite.** Replace ghost creation/management with transform application. Remove all imports of ghost helpers (`createGhost`, `findGhostAtPoint`, `setGhostDragging`, `setGhostSettled`, `hasGhostForElement`, `moveGhost`, `updateGhostPosition`). Implement placeholder creation, transform composition, transition override, and drag animation. |
 | `interaction.ts` | Update `getPageElementAtPoint()` to remove `data-frameup-ghost` filtering. |
-| `index.ts` | Swap `initGhostLayer()` for new move system init. Remove `onGhostPositionUpdate` wiring. |
+| `index.ts` | Swap `initGhostLayer()` for new move system init. Remove `onGhostPositionUpdate` wiring. Wire up HMR re-acquisition for move entries. |
 | `canvas-transform.ts` | Remove ghost-filtering check (`data-frameup-ghost` attribute check when moving children into wrapper). |
 | `component-filter.ts` | Remove `data-frameup-ghost` attribute check. |
 | `highlight-canvas.ts` | Remove `data-frameup-ghost` attribute on canvas element (no longer meaningful). |
@@ -163,6 +198,7 @@ If a parent element is moved and then a child within it is also moved, both get 
 
 The placeholder must be an exact space match for the original element. Copy from `getComputedStyle(element)`:
 
+- `display` (a flex item with `display: inline-flex` behaves differently than a `display: block` placeholder)
 - `width`, `height`
 - `margin` (top, right, bottom, left)
 - `padding` (top, right, bottom, left)
