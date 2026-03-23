@@ -224,8 +224,8 @@ export type Annotation = DrawAnnotation | TextAnnotation | ColorOverride;
 // because shared types must be serializable. The overlay package defines
 // ColorOverrideRuntime (in canvas-state.ts) which adds the runtime-only field.
 export type CanvasUndoAction =
-  | { type: "ghostCreate"; ghostId: string }
-  | { type: "ghostMove"; ghostId: string; previousPos: { x: number; y: number } }
+  | { type: "moveCreate"; moveId: string }
+  | { type: "moveDelta"; moveId: string; previousDelta: { dx: number; dy: number } }
   | { type: "annotationAdd"; annotationId: string }
   | { type: "colorChange"; annotationId: string; property: string; previousColor: string }
   | {
@@ -239,8 +239,8 @@ export interface SerializedAnnotations {
     component: string;
     file: string;
     line: number;
-    from: { top: number; left: number; width: number; height: number };
-    to: { x: number; y: number };
+    originalRect: { top: number; left: number; width: number; height: number };
+    delta: { dx: number; dy: number };
   }>;
   annotations: Array<{
     type: "draw" | "text";
