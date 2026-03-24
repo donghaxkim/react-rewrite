@@ -319,6 +319,20 @@ export function serializeAnnotations(): SerializedAnnotations {
       height: entry.originalRect.height,
     },
     delta: { dx: entry.delta.dx, dy: entry.delta.dy },
+    siblingRects: (() => {
+      const parent = entry.element.parentElement;
+      if (!parent) return undefined;
+      const rects: Array<{ component: string; rect: { top: number; left: number; width: number; height: number } }> = [];
+      for (const child of Array.from(parent.children)) {
+        if (child === entry.element || !(child instanceof HTMLElement)) continue;
+        const rect = child.getBoundingClientRect();
+        rects.push({
+          component: child.tagName.toLowerCase(),
+          rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+        });
+      }
+      return rects.length > 0 ? rects : undefined;
+    })(),
   }));
 
   const anns: SerializedAnnotations["annotations"] = [];
@@ -352,6 +366,7 @@ export function serializeAnnotations(): SerializedAnnotations {
         property: ann.property,
         from: ann.fromColor,
         to: ann.toColor,
+        pickedToken: (ann as any).pickedToken,
       });
     }
   }
