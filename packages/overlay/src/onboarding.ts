@@ -1,10 +1,9 @@
-import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
+import { COLORS, FONT_FAMILY, TRANSITIONS } from "./design-tokens.js";
 import { getShadowRoot } from "./toolbar.js";
 
-const STORAGE_KEY = "frameup-onboarding-seen";
+const STORAGE_KEY = "frameup-onboarding-dismissed";
 
-let hintEl: HTMLDivElement | null = null;
-let dismissTimer: ReturnType<typeof setTimeout> | null = null;
+let barEl: HTMLDivElement | null = null;
 
 export function showOnboardingHint(): void {
   if (localStorage.getItem(STORAGE_KEY)) return;
@@ -12,58 +11,56 @@ export function showOnboardingHint(): void {
   const shadowRoot = getShadowRoot();
   if (!shadowRoot) return;
 
-  hintEl = document.createElement("div");
-  hintEl.style.cssText = `
+  barEl = document.createElement("div");
+  barEl.style.cssText = `
     position: fixed;
-    left: 72px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: ${COLORS.bgPrimary};
-    border: 1px solid ${COLORS.border};
-    box-shadow: ${SHADOWS.md};
-    border-radius: ${RADII.md};
-    padding: 12px 16px;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: ${COLORS.bgSecondary};
     font-family: ${FONT_FAMILY};
     font-size: 12px;
-    color: ${COLORS.textPrimary};
+    color: ${COLORS.textSecondary};
     z-index: 2147483647;
     opacity: 0;
     transition: opacity ${TRANSITIONS.medium};
-    max-width: 260px;
+    pointer-events: auto;
   `;
 
-  const shortcuts = ["V", "H", "M", "D", "C", "T", "L"];
-  const badgeStyle = `
-    display: inline-block;
-    background: ${COLORS.bgSecondary};
+  const text = document.createElement("span");
+  text.textContent = "Click any element to edit its properties. Double-click text to edit it.";
+
+  const closeBtn = document.createElement("span");
+  closeBtn.textContent = "\u00d7";
+  closeBtn.style.cssText = `
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
     color: ${COLORS.textTertiary};
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 11px;
-    font-family: ${FONT_FAMILY};
-    margin: 0 2px;
   `;
+  closeBtn.addEventListener("click", () => dismissOnboarding());
 
-  hintEl.innerHTML = `Press ${shortcuts.map(k => `<span style="${badgeStyle}">${k}</span>`).join(" ")} to switch tools`;
+  barEl.appendChild(text);
+  barEl.appendChild(closeBtn);
+  shadowRoot.appendChild(barEl);
 
-  shadowRoot.appendChild(hintEl);
   requestAnimationFrame(() => {
-    if (hintEl) hintEl.style.opacity = "1";
+    if (barEl) barEl.style.opacity = "1";
   });
-
-  dismissTimer = setTimeout(dismissOnboarding, 5000);
 }
 
 export function dismissOnboarding(): void {
-  if (!hintEl) return;
+  if (!barEl) return;
   localStorage.setItem(STORAGE_KEY, "1");
-  hintEl.style.opacity = "0";
+  barEl.style.opacity = "0";
   setTimeout(() => {
-    hintEl?.remove();
-    hintEl = null;
+    barEl?.remove();
+    barEl = null;
   }, 150);
-  if (dismissTimer) {
-    clearTimeout(dismissTimer);
-    dismissTimer = null;
-  }
 }

@@ -8,6 +8,7 @@ import type { MergedTokenMap } from "./tailwind-resolver.js";
 import { send, onCommitResult } from "../bridge.js";
 import type { PropertyControl } from "./controls/types.js";
 import { pushUndoAction, type PropertyChangeRuntime } from "../canvas-state.js";
+import { dismissOnboarding } from "../onboarding.js";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 
@@ -434,6 +435,8 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
   if (state.pendingBatch.size > 0) {
     commit();
   }
+
+  dismissOnboarding();
 
   // Clean up previous controls
   destroyControls();
