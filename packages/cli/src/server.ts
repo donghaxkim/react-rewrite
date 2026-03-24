@@ -14,35 +14,12 @@ import { reorderComponent, getSiblings } from "./transform.js";
 import { updateClassName, updateTextContent } from "./transform.js";
 import { resolveTailwindConfig } from "./tailwind-resolver.js";
 import { generate } from "./generate.js";
+import { isProjectFilePathSafe, resolveProjectFilePath } from "./path-resolver.js";
 
 interface SketchServerOptions {
   port: number;
   apiKey?: string;
   model?: string;
-}
-
-/**
- * Validate that a file path is within the project root to prevent
- * path traversal attacks via WebSocket messages.
- *
- * React fiber debug info often provides relative paths (e.g. "src/App.tsx")
- * or Vite-style paths ("/src/App.tsx"). We resolve these against projectRoot
- * so they map correctly instead of resolving against the CLI's CWD.
- */
-function isPathSafe(filePath: string, projectRoot: string): boolean {
-  const resolved = path.isAbsolute(filePath)
-    ? path.resolve(filePath)
-    : path.resolve(projectRoot, filePath);
-  return resolved.startsWith(projectRoot + path.sep) || resolved === projectRoot;
-}
-
-/**
- * Resolve a file path that may be relative (from React fiber debug info)
- * to an absolute path within the project root.
- */
-function resolveFilePath(filePath: string, projectRoot: string): string {
-  if (path.isAbsolute(filePath)) return path.resolve(filePath);
-  return path.resolve(projectRoot, filePath);
 }
 
 interface SketchServer {
@@ -86,12 +63,12 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
     try {
       switch (msg.type) {
         case "reorder": {
-          if (!isPathSafe(msg.filePath, projectRoot)) {
+          if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
             console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "reorderComplete", success: false, error: "File path is outside the project root" });
             break;
           }
-          const resolvedPath = resolveFilePath(msg.filePath, projectRoot);
+          const resolvedPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
           const prevContent = fs.readFileSync(resolvedPath, "utf-8");
           const undoId = randomUUID();
 
@@ -136,12 +113,12 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         }
 
         case "updateProperty": {
-          if (!isPathSafe(msg.filePath, projectRoot)) {
+          if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
             console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
             break;
           }
-          const resolvedPropPath = resolveFilePath(msg.filePath, projectRoot);
+          const resolvedPropPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
           const prevContent = fs.readFileSync(resolvedPropPath, "utf-8");
           const undoId = randomUUID();
           try {
@@ -169,12 +146,12 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         }
 
         case "updateProperties": {
-          if (!isPathSafe(msg.filePath, projectRoot)) {
+          if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
             console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
             break;
           }
-          const resolvedPropsPath = resolveFilePath(msg.filePath, projectRoot);
+          const resolvedPropsPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
           const prevContent = fs.readFileSync(resolvedPropsPath, "utf-8");
           const undoId = randomUUID();
           try {
@@ -205,12 +182,12 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         }
 
         case "updateText": {
-          if (!isPathSafe(msg.filePath, projectRoot)) {
+          if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
             console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "updateTextComplete", success: false, error: "File path is outside the project root" });
             break;
           }
-          const resolvedTextPath = resolveFilePath(msg.filePath, projectRoot);
+          const resolvedTextPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
           const prevContent = fs.readFileSync(resolvedTextPath, "utf-8");
           const undoId = randomUUID();
           try {
@@ -337,13 +314,13 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "getSiblings":
           // Can run concurrently (read-only)
-          if (!isPathSafe(msg.filePath, projectRoot)) {
+          if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
             console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
             send(ws, { type: "siblingsList", siblings: [] });
             break;
           }
           try {
-            const siblings = getSiblings(resolveFilePath(msg.filePath, projectRoot), msg.parentLine);
+            const siblings = getSiblings(resolveProjectFilePath(msg.filePath, projectRoot)!, msg.parentLine);
             send(ws, { type: "siblingsList", siblings });
           } catch (err) {
             send(ws, { type: "siblingsList", siblings: [] });
