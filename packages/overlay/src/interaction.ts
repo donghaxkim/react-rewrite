@@ -2,7 +2,9 @@
 
 import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
 import { isFullPageElement } from "./utils/component-filter.js";
-import { handleWheelZoom } from "./canvas-transform.js";
+import { handleWheelZoom, panCanvas } from "./canvas-transform.js";
+import { isTextEditing } from "./inline-text-edit.js";
+import { getActiveTool } from "./canvas-state.js";
 
 export type ToolEventHandler = {
   onMouseDown?: (e: MouseEvent) => void | Promise<void>;
@@ -13,6 +15,11 @@ export type ToolEventHandler = {
 let interactionEl: HTMLDivElement | null = null;
 let activeHandler: ToolEventHandler | null = null;
 let toolHandlers: Map<string, ToolEventHandler> = new Map();
+
+let isPanning = false;
+let panLastX = 0;
+let panLastY = 0;
+let prePanCursor = "";
 
 export function registerToolHandler(tool: string, handler: ToolEventHandler): void {
   toolHandlers.set(tool, handler);
@@ -36,17 +43,39 @@ export function initInteraction(): void {
   document.addEventListener("scroll", clearElementCache, true);
 
   interactionEl.addEventListener("mousedown", (e) => {
+    if (isPanning) {
+      panLastX = e.clientX;
+      panLastY = e.clientY;
+      if (interactionEl) interactionEl.style.cursor = "grabbing";
+      e.preventDefault();
+      return;
+    }
     activeHandler?.onMouseDown?.(e);
   });
   interactionEl.addEventListener("mousemove", (e) => {
+    if (isPanning && panLastX !== 0) {
+      panCanvas(e.clientX - panLastX, e.clientY - panLastY);
+      panLastX = e.clientX;
+      panLastY = e.clientY;
+      return;
+    }
     activeHandler?.onMouseMove?.(e);
   });
   interactionEl.addEventListener("mouseup", (e) => {
+    if (isPanning) {
+      if (interactionEl) interactionEl.style.cursor = "grab";
+      panLastX = 0;
+      panLastY = 0;
+      return;
+    }
     activeHandler?.onMouseUp?.(e);
   });
 
   // Wheel zoom for infinite canvas (works on any tool)
   document.addEventListener("wheel", onWheel, { passive: false });
+
+  document.addEventListener("keydown", onSpaceDown);
+  document.addEventListener("keyup", onSpaceUp);
 }
 
 function onWheel(e: WheelEvent): void {
@@ -58,10 +87,44 @@ function onWheel(e: WheelEvent): void {
   handleWheelZoom(e);
 }
 
+function onSpaceDown(e: KeyboardEvent): void {
+  if (e.key !== " ") return;
+  // Don't intercept spacebar during text editing or when typing in inputs
+  if (isTextEditing()) return;
+  const active = document.activeElement;
+  if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+  if ((active as HTMLElement)?.isContentEditable) return;
+
+  e.preventDefault();
+  if (!isPanning && interactionEl) {
+    prePanCursor = interactionEl.style.cursor;
+    interactionEl.style.cursor = "grab";
+    interactionEl.style.pointerEvents = "auto";
+    isPanning = true;
+  }
+}
+
+function onSpaceUp(e: KeyboardEvent): void {
+  if (e.key !== " ") return;
+  if (!isPanning) return;
+  e.preventDefault();
+  isPanning = false;
+  panLastX = 0;
+  panLastY = 0;
+  if (interactionEl) {
+    interactionEl.style.cursor = prePanCursor;
+    // Restore pointer-events based on current tool
+    const tool = getActiveTool();
+    interactionEl.style.pointerEvents = tool === "select" ? "none" : "auto";
+  }
+}
+
+export function isPanningActive(): boolean { return isPanning; }
+
 export function activateInteraction(tool: string): void {
   activeHandler = toolHandlers.get(tool) || null;
   if (interactionEl) {
-    interactionEl.style.pointerEvents = tool === "pointer" ? "none" : "auto";
+    interactionEl.style.pointerEvents = tool === "select" ? "none" : "auto";
   }
   updateCursor(tool);
 }
@@ -69,8 +132,7 @@ export function activateInteraction(tool: string): void {
 function updateCursor(tool: string): void {
   if (!interactionEl) return;
   switch (tool) {
-    case "pointer": interactionEl.style.cursor = "default"; break;
-    case "grab": interactionEl.style.cursor = "grab"; break;
+    case "select": interactionEl.style.cursor = "default"; break;
     case "text": interactionEl.style.cursor = "text"; break;
     default: interactionEl.style.cursor = "default";
   }
@@ -118,6 +180,9 @@ export function getPageElementAtPoint(clientX: number, clientY: number): HTMLEle
 export function destroyInteraction(): void {
   document.removeEventListener("scroll", clearElementCache, true);
   document.removeEventListener("wheel", onWheel);
+  document.removeEventListener("keydown", onSpaceDown);
+  document.removeEventListener("keyup", onSpaceUp);
+  isPanning = false;
   interactionEl?.remove();
   interactionEl = null;
   activeHandler = null;

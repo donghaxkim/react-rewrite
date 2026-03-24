@@ -24,6 +24,7 @@ import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMultiSelection, isMultiSelectActive, getHandleAtPoint, getSelectionGeometry, type CornerHandle } from "./highlight-canvas.js";
 import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
+import { isPanningActive } from "./interaction.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -276,6 +277,7 @@ export function initSelection(): void {
 
 function handleMouseDown(e: MouseEvent): void {
   if (!isActive) return;
+  if (isPanningActive()) return;
 
   // Cmd+click (Mac) or Ctrl+click (Win/Linux) → let browser handle (follow links, etc.)
   if (e.metaKey || e.ctrlKey) return;
@@ -352,6 +354,7 @@ function handleMouseDown(e: MouseEvent): void {
 
 function handleMouseMove(e: MouseEvent): void {
   if (!isActive) return;
+  if (isPanningActive()) return;
 
   // Resize drag — compute new width/height from mouse delta
   if (mode === "resize-drag" && resizeDragCorner && mouseDownPos && resizeInitialRect) {
@@ -454,6 +457,7 @@ function handleMouseMove(e: MouseEvent): void {
 
 function handleMouseUp(e: MouseEvent): void {
   if (!isActive) return;
+  if (isPanningActive()) return;
 
   const prevMode = mode;
   mode = "idle";
