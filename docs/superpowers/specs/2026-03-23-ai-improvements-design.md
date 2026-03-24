@@ -195,7 +195,13 @@ function applyReplacements(
    result = result.slice(0, offset) + replace + result.slice(offset + length)
 ```
 
-This ensures all offsets are computed against the original content and remain valid throughout application. The "order blocks from top-of-file to bottom-of-file" prompt instruction is for Claude's readability — the application order is always reverse-offset.
+This ensures all offsets are computed against the original content and remain valid throughout application. The "order blocks from top-of-file to bottom-of-file" prompt instruction is for Claude's readability — the application order is always reverse-offset. Add a comment in `applyReplacements` explaining this:
+
+```typescript
+// Blocks arrive top-to-bottom (prompt instructs Claude to order them that way for readability),
+// but we apply bottom-to-top so that earlier offsets remain valid after each splice.
+// All offsets are computed against the original content before any replacements.
+```
 
 ### Files Changed
 
@@ -265,5 +271,11 @@ No CSS changes needed. The `showToast("Generation in progress")` line is a fallb
 ## Testing
 
 - **Model flag:** Manual test — pass `--model claude-sonnet-4-20250514` (default behavior unchanged), pass `--model claude-opus-4-20250514` (cost display shows token count)
-- **LINES validation:** Add unit tests for `parseDiffResponse` with LINES directives, `validateDiffChange` with multi-occurrence SEARCH blocks disambiguated by line range, and `applyReplacements` with line-targeted replacements
+- **LINES validation:** Add unit tests for:
+  - `parseDiffResponse` with LINES directives parses correctly
+  - `parseDiffResponse` fallback: SEARCH/REPLACE block without LINES directive parses successfully with `lines: undefined`
+  - `validateDiffChange` with multi-occurrence SEARCH blocks disambiguated by line range
+  - `validateDiffChange` fallback: no LINES directive + single occurrence → applies successfully
+  - `validateDiffChange` fallback: no LINES directive + multiple occurrences → rejects (preserves original safety behavior)
+  - `applyReplacements` with line-targeted replacements, including reverse-offset application order
 - **Button UX:** Manual test — trigger generation, verify button is visually disabled, verify toast on re-trigger attempt
