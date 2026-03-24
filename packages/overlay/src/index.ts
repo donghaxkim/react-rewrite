@@ -27,6 +27,7 @@ import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { initInlineTextEdit, destroyInlineTextEdit } from "./inline-text-edit.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
+import { initChangelog, destroyChangelog, addChangeEntry, isChangelogOpen, setChangelogOpen } from "./changelog.js";
 
 declare global {
   interface Window {
@@ -169,6 +170,7 @@ function init(): void {
   const shadowRoot = getShadowRoot();
   if (shadowRoot) {
     initPropertyController(shadowRoot);
+    initChangelog(shadowRoot);
   }
 
   // Phase 1 systems
@@ -208,6 +210,15 @@ function init(): void {
   });
 
   moveObserver.observe(document.body, { childList: true, subtree: true });
+
+  // Keyboard shortcut: Cmd+Shift+L / Ctrl+Shift+L — toggle changelog
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "l") {
+      e.preventDefault();
+      setChangelogOpen(!isChangelogOpen());
+    }
+  });
+
   initToolsPanel();
   initInlineTextEdit();
   initInteraction();
@@ -294,6 +305,15 @@ function init(): void {
       generating = false;
       updateGenerateButton(hasChanges());
       if (msg.success) {
+        const fileCount = msg.changes.length;
+        addChangeEntry({
+          type: "generate",
+          componentName: "AI Generate",
+          filePath: msg.changes[0]?.filePath || "",
+          summary: `${fileCount} file${fileCount !== 1 ? "s" : ""} changed`,
+          state: "active",
+          revertData: { type: "generateUndo", undoIds: msg.undoIds || [] },
+        });
         const summary = msg.changes
           .map((c) => c.description || c.filePath)
           .join(", ");
@@ -343,6 +363,7 @@ function close(): void {
   destroyAnnotationLayer();
   moveObserver?.disconnect();
   destroyToolsPanel();
+  destroyChangelog();
   destroyInlineTextEdit();
   destroyInteraction();
   resetCanvas();
