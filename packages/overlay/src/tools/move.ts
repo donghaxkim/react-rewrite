@@ -10,9 +10,12 @@ import {
   getMoveForElement,
   hasMoveForElement,
   viewportToPage,
+  getCanvasTransform,
 } from "../canvas-state.js";
 import { getSelection, getSelectedElement, selectElementForMove, clearSelection } from "../selection.js";
 import { getPageElementAtPoint } from "../interaction.js";
+import { computeSnap } from "../snap-guides.js";
+import { setSnapGuides, clearSnapGuides } from "../highlight-canvas.js";
 
 let dragEntry: MoveEntry | null = null;
 let dragStartMouse = { x: 0, y: 0 };
@@ -114,10 +117,32 @@ export const moveHandler: ToolEventHandler = {
   onMouseMove(e: MouseEvent) {
     if (!isDragging || !dragEntry) return;
     const pagePos = viewportToPage(e.clientX, e.clientY);
-    const dx = preDragDelta.dx + (pagePos.x - dragStartMouse.x);
-    const dy = preDragDelta.dy + (pagePos.y - dragStartMouse.y);
-    dragEntry.delta = { dx, dy };
-    applyDragVisual(dragEntry.element, dx, dy, dragEntry.existingTransform);
+    const rawDx = preDragDelta.dx + (pagePos.x - dragStartMouse.x);
+    const rawDy = preDragDelta.dy + (pagePos.y - dragStartMouse.y);
+
+    // Apply raw transform first so getBoundingClientRect() reflects current position
+    applyDragVisual(dragEntry.element, rawDx, rawDy, dragEntry.existingTransform);
+
+    // Snap to parent center
+    const parent = dragEntry.element.parentElement;
+    if (!parent || parent === document.body || parent === document.documentElement) {
+      dragEntry.delta = { dx: rawDx, dy: rawDy };
+      clearSnapGuides();
+      return;
+    }
+
+    const elemRect = dragEntry.element.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const { scale } = getCanvasTransform();
+    const snap = computeSnap(elemRect, parentRect, rawDx, rawDy, 5, scale);
+
+    // Re-apply with snap-adjusted deltas if snapped (corrects position in same frame)
+    if (snap.snappedX || snap.snappedY) {
+      applyDragVisual(dragEntry.element, snap.dx, snap.dy, dragEntry.existingTransform);
+    }
+
+    dragEntry.delta = { dx: snap.dx, dy: snap.dy };
+    setSnapGuides(snap.guides);
   },
 
   onMouseUp() {
@@ -127,6 +152,7 @@ export const moveHandler: ToolEventHandler = {
         updateMoveDelta(dragEntry.id, dragEntry.delta, preDragDelta);
       }
       settleDragVisual(dragEntry);
+      clearSnapGuides();
       // Re-select at new position so highlight tracks the moved element
       selectElementForMove(dragEntry.element);
     }
