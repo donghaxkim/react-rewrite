@@ -23,10 +23,7 @@ const MOD_KEY = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+";
 const MOD_LABEL = navigator.platform.includes("Mac") ? "Cmd" : "Ctrl";
 
 const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: string }> = [
-  { type: "pointer", icon: ICONS.pointer, label: "Pointer", shortcut: "V" },
-  { type: "grab", icon: ICONS.grab, label: "Grab", shortcut: "G" },
-  { type: "move", icon: ICONS.move, label: "Move", shortcut: "J" },
-  { type: "draw", icon: ICONS.draw, label: "Draw", shortcut: "D" },
+  { type: "select", icon: ICONS.pointer, label: "Select", shortcut: "V" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
 ];
 
@@ -505,8 +502,8 @@ function openShortcutsOverlay(): void {
     {
       label: "Canvas",
       items: [
-        { action: "Pan", keys: ["Grab Tool", "Drag"] },
-        { action: "Zoom", keys: ["Scroll Wheel"] },
+        { action: "Pan", keys: ["Space", "Drag"] },
+        { action: "Zoom", keys: [MOD_LABEL, "Scroll"] },
       ],
     },
   ];
@@ -590,48 +587,7 @@ function updateSubOptions(tool: ToolType): void {
   subOptionsEl.classList.add("hidden");
   subOptionsEl.classList.remove("visible");
 
-  if (tool === "draw") {
-    subOptionsEl.classList.remove("hidden");
-    requestAnimationFrame(() => subOptionsEl?.classList.add("visible"));
-    const opts = getToolOptions();
-
-    // Color swatch
-    const swatch = document.createElement("button");
-    swatch.className = "color-swatch";
-    swatch.style.background = opts.brushColor;
-    swatch.addEventListener("click", () => {
-      const rect = swatch.getBoundingClientRect();
-      openColorPicker({
-        initialColor: opts.brushColor,
-        position: { x: rect.right + 8, y: rect.top },
-        showPropertyToggle: false,
-        onColorChange(hex) {
-          setToolOption("brushColor", hex);
-          swatch.style.background = hex;
-        },
-        onClose() {},
-      });
-    });
-    subOptionsEl.appendChild(swatch);
-
-    // Segmented control for sizes
-    const segmented = document.createElement("div");
-    segmented.className = "segmented-control";
-    for (const size of [2, 4, 8]) {
-      const seg = document.createElement("button");
-      seg.className = `segment${size === opts.brushSize ? " active" : ""}`;
-      seg.textContent = `${size}`;
-      seg.addEventListener("click", () => {
-        setToolOption("brushSize", size);
-        segmented.querySelectorAll(".segment").forEach(s => s.classList.remove("active"));
-        seg.classList.add("active");
-        // Update draw cursor
-        import("./interaction.js").then(m => m.refreshDrawCursor());
-      });
-      segmented.appendChild(seg);
-    }
-    subOptionsEl.appendChild(segmented);
-  } else if (tool === "text") {
+  if (tool === "text") {
     subOptionsEl.classList.remove("hidden");
     requestAnimationFrame(() => subOptionsEl?.classList.add("visible"));
     const opts = getToolOptions();
