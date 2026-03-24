@@ -45,7 +45,8 @@ The changelog solves (1) and (2) immediately by surfacing every change in one ch
 ### Panel Location & Layout
 
 - **Position:** Bottom-left, fixed. `left: 16px; bottom: 16px`. Independent of the tools panel.
-- **Collapsed state (default):** A small bar showing a counter badge (e.g., "12 changes") and a chevron to expand.
+- **Hidden until first entry:** The panel does not render until `entries.size > 0`. No empty state, no "0 changes" badge. The user discovers the changelog organically by making their first change. On first entry, the panel animates in with a subtle slide-up (200ms ease-out).
+- **Collapsed state:** A small bar showing a counter badge (e.g., "12 changes") and a chevron to expand.
 - **Expanded state:** Scrollable list of change entries, most recent at top. Max height: 50vh. Beyond that, scroll within the panel.
 - **Transition:** Slide-up expand animation (200ms ease-out), consistent with property sidebar animation.
 - **Width:** 360px (enough for entry format without truncation).
@@ -55,7 +56,7 @@ The changelog solves (1) and (2) immediately by surfacing every change in one ch
 Each entry is a single scannable line:
 
 ```
-ComponentName → what changed                    file.tsx    0:04 ago
+ComponentName → what changed                    file.tsx    4s ago
 ```
 
 Examples by change type:
@@ -72,10 +73,21 @@ Examples by change type:
 
 The `(pending)` suffix indicates the change is visual-only (canvas annotation) and will be applied to source at Generate time. This applies to text annotation edits, moves, and color overrides.
 
+### Time Formatting
+
+Relative time uses human-readable units, not m:ss duration format:
+- < 5s: "just now"
+- < 60s: "Xs ago" (e.g., "47s ago")
+- < 60m: "Xm ago" (e.g., "3m ago")
+- < 24h: "Xh ago" (e.g., "2h ago")
+
+**Update interval:** A 10-second interval updates only the `.entry-time` text nodes (not the full DOM). The interval runs only when the panel is expanded; it stops when collapsed and resumes on expand. This avoids rebuilding the entire entry list every tick.
+
 ### Entry States
 
 - **Active:** Normal text, revert icon visible on hover.
-- **Reverted:** Grayed out text, strikethrough, "Reverted" label. Entry remains visible in the log.
+- **Reverting:** Subtle opacity reduction (0.6), revert icon replaced with a small spinner. Transient state while waiting for CLI `revertComplete`. On success → "reverted". On failure → restored to "active" with error toast.
+- **Reverted:** `opacity: 0.5`, strikethrough on `.entry-summary` only (not the file name or timestamp). Entry remains visible in the log.
 - **Pending:** Italic text with `(pending)` suffix — annotation-based changes not yet written to source. Includes: moves, text annotations, color overrides.
 
 ### Coalescing
@@ -84,27 +96,27 @@ If the same property on the same element changes multiple times within 3 seconds
 
 Example: User scrubs font-size from 12 → 14 → 16 → 18 → 20 over 2 seconds. Log shows one entry: `Navbar → font-size: 12px → 20px` with 4 accumulated undo IDs.
 
-**Implementation:** Coalescing is checked in the `updatePropertyComplete` response handler (not at commit time), since `undoId` is only available after the CLI confirms. The handler checks the most recent log entry: if it matches the same element + same property + was created within the coalesce window, update the entry's `newValue`, `timestamp`, and append the new `undoId` instead of creating a new entry. The 3-second window is measured from the previous entry's timestamp at response time.
+**Implementation:** Coalescing is checked in the `updatePropertyComplete` response handler (not at commit time), since `undoId` is only available after the CLI confirms. The handler finds the most recent *property* entry (filtering by `type === "property"`, not just the last entry in the map) that matches the same element + same property + was created within the coalesce window. If found, update the entry's `newValue`, `timestamp`, and append the new `undoId` instead of creating a new entry. The 3-second window is measured from the candidate entry's timestamp at response time. Non-property entries between the current and candidate entry are skipped, not used as a break condition.
 
 **Batch commits:** A single `updateProperties` call (multiple properties in one commit) produces one `undoId` covering the entire batch. The changelog creates one entry per property in the batch, but all share the same `undoId`. Reverting any one of them reverts the entire batch — this is a CLI limitation since the undo entry is a file snapshot.
 
 ### Per-Entry Revert
 
 - **Trigger:** Small revert icon (↩) appears on hover, right side of the entry.
-- **On click:** The change is undone — dispatched to the appropriate backend:
+- **On click:** Entry transitions to "reverting" state. The change is dispatched to the appropriate backend:
   - Property changes → send CLI revert with all accumulated undo IDs
   - Moves → call `removeMove(moveId)` from canvas-state (moves are annotations, not source writes)
   - Text edits (AST) → send CLI revert with undo ID
-  - Text edits (annotation) → remove annotation from canvas state, restore originalInnerHTML
+  - Text edits (annotation) → remove annotation from canvas state, restore via `textContent` (not `innerHTML` — avoids XSS surface from CMS/API-injected content in user components)
   - AI Generate → revert all file changes from that generation (batch revert via undo IDs)
-- **After revert:** Entry updates to "Reverted" state (grayed, strikethrough). Entry stays in the log.
+- **After revert response:** On `revertComplete` success → entry transitions to "reverted". On failure → entry restored to "active" with error toast. The `revertComplete` handler finds entries by scanning `entries` for any whose `revertData.undoIds` contains the returned `undoId` (reverse lookup — entries are keyed by entry ID, not undo ID).
 - **Out-of-order revert:** Users can revert any entry, not just the most recent. Each revert is independent. If reverting an earlier change would conflict with a later change to the same code location, show a warning toast: "Cannot revert — file has changed since this edit."
 
 ### Keyboard Shortcut
 
-`Ctrl+Shift+L` or `Cmd+Shift+L` toggles the changelog panel open/closed.
+**TBD — requires audit.** `Cmd+Shift+L` conflicts with Safari's "Show Downloads" and Linux "Lock Screen." The shortcut must be audited against Chrome, Firefox, and Safari defaults before finalizing. Candidates: `Cmd+Shift+H` (history), `Cmd+\` (less contested), or a key that doesn't conflict with any major browser.
 
-**Note:** `Ctrl+L` / `Cmd+L` conflicts with the browser's "focus address bar" shortcut and would be intercepted before reaching the overlay.
+**Note:** `Ctrl+L` / `Cmd+L` conflicts with the browser's "focus address bar" and is not usable.
 
 ## Architecture
 
@@ -133,9 +145,10 @@ interface ChangeEntry {
   componentName: string;
   filePath: string;                    // displayed as basename in UI
   summary: string;                     // human-readable one-line summary
-  state: "active" | "reverted" | "pending";
+  state: "active" | "reverting" | "reverted" | "pending";
   // move and textAnnotation entries start as "pending"
   // property and textEdit entries start as "active"
+  // "reverting" is a transient state while waiting for CLI confirmation
 
   // For coalescing
   propertyKey?: string;                // e.g., "font-size"
@@ -148,7 +161,7 @@ interface ChangeEntry {
 type RevertData =
   | { type: "cliUndo"; undoIds: string[] }
   | { type: "moveRemove"; moveId: string }
-  | { type: "annotationRemove"; annotationId: string; originalInnerHTML: string; elementIdentity: ElementIdentity }
+  | { type: "annotationRemove"; annotationId: string; originalTextContent: string; elementIdentity: ElementIdentity }
   | { type: "generateUndo"; undoIds: string[] };
 ```
 
@@ -183,7 +196,7 @@ div.changelog-panel
     div.changelog-entry         ← one per change
       span.entry-summary        ← "Navbar → font-size: 16px → 20px"
       span.entry-file           ← "file.tsx"
-      span.entry-time           ← "0:04 ago"
+      span.entry-time           ← "4s ago"
       button.entry-revert       ← ↩ icon, visible on hover
 ```
 
@@ -219,7 +232,7 @@ Each undo entry gets a `crypto.randomUUID()` at push time. The existing LIFO und
 - For each `undoId`, look up the `UndoEntry` by ID.
 - **Conflict detection:** Compare the file's current content against the entry's `afterContent` (the content after the change was applied). If they don't match, the file has been modified since — return an error for that ID and show a toast.
 - **Revert:** If content matches, restore the file from the entry's `beforeContent` snapshot.
-- **Ordering:** When multiple `undoIds` target the same file (coalesced entries), process in reverse chronological order. Each revert restores to the state before that specific change.
+- **Coalesced revert (same file):** When multiple `undoIds` from a coalesced entry target the same file, do NOT process them individually — the `afterContent` conflict check on the second revert would fail because the first already changed the file. Instead, find the earliest `beforeContent` in the batch and apply a single write restoring to that state. This is one file write, not N sequential reverts. The `afterContent` check runs once against the most recent entry's `afterContent` (which reflects the file's current expected state).
 - **Stack cleanup:** Reverted entries are marked as reverted in the undo stack but not removed, preserving stack integrity for the existing Ctrl+Z flow.
 
 ### Visual Style
@@ -231,14 +244,14 @@ Each undo entry gets a `crypto.randomUUID()` at push time. The existing LIFO und
 | Panel border-radius | `RADII.md` (10px) |
 | Panel shadow | `SHADOWS.md` |
 | Entry font | `12px Inter` (same as property panel) |
-| Entry height | `28px` (compact, scannable) |
+| Entry height | `32px` minimum (28px is too tight for trackpad targeting; revert button needs at least 24×24 hit area) |
 | Component name | `COLORS.textPrimary`, semi-bold |
 | Arrow (→) | `COLORS.textTertiary` |
 | Change detail | `COLORS.textSecondary` |
 | File path | `COLORS.textTertiary`, right-aligned |
 | Time | `COLORS.textTertiary`, right-aligned |
 | Revert icon | `COLORS.accent`, visible on hover only |
-| Reverted entry | `COLORS.textTertiary`, strikethrough, 50% opacity |
+| Reverted entry | `opacity: 0.5` on row; `text-decoration: line-through` on `.entry-summary` only (not file name or timestamp) |
 | Pending entry | `COLORS.textSecondary`, italic |
 | Count badge | `COLORS.accent` background, white text, pill shape |
 | Max panel height | `50vh` |
@@ -248,7 +261,7 @@ Each undo entry gets a `crypto.randomUUID()` at push time. The existing LIFO und
 
 - **HMR during revert:** If the file has been modified by HMR between the original change and the revert attempt, the CLI revert may fail. Show a toast: "Cannot revert — file has changed."
 - **Generate revert with subsequent edits:** Reverting a generate undoes the AI's changes but leaves subsequent property changes intact (separate entries). If property changes depended on generated code, the file may be inconsistent — user's decision.
-- **Rapid coalescing:** 50 rapid changes to the same property → one entry with up to 50 undo IDs. On revert, send all IDs — the CLI processes them in reverse chronological order, each restoring the file to its before-state.
+- **Rapid coalescing:** 50 rapid changes to the same property → one entry with up to 50 undo IDs. On revert, the CLI groups IDs by file, finds the earliest `beforeContent` in each group, and writes once per file (not N sequential reverts). The `afterContent` conflict check uses the most recent entry's `afterContent`.
 - **Session loss:** If the browser tab closes, the changelog is lost but all source changes persist on disk. Acceptable — the changelog is a session aid.
 - **Panel overflow:** Beyond ~50 visible entries, the panel scrolls. No virtualization initially — 200 DOM entries is negligible.
 
