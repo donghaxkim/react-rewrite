@@ -241,6 +241,7 @@ export interface SerializedAnnotations {
     line: number;
     originalRect: { top: number; left: number; width: number; height: number };
     delta: { dx: number; dy: number };
+    siblingRects?: Array<{ component: string; rect: { top: number; left: number; width: number; height: number } }>;
   }>;
   annotations: Array<{
     type: "draw" | "text";
@@ -263,5 +264,43 @@ export interface SerializedAnnotations {
     property: string;
     from: string;
     to: string;
+    pickedToken?: string;
+  }>;
+}
+
+export interface ResolvedValue<T> {
+  raw: T;
+  resolved: string | null;
+  resolvedValue: string | null;
+  confidence: number;
+  type: "exact" | "snapped" | "arbitrary";
+}
+
+export interface ResolvedAnnotations {
+  moves: Array<{
+    component: string;
+    file: string;
+    line: number;
+    originalRect: { top: number; left: number; width: number; height: number };
+    delta: { dx: number; dy: number };
+    resolvedDx: ResolvedValue<number> | null;
+    resolvedDy: ResolvedValue<number> | null;
+    nearestSiblings: {
+      left?: { component: string; distance: number };
+      right?: { component: string; distance: number };
+      above?: { component: string; distance: number };
+      below?: { component: string; distance: number };
+    };
+  }>;
+  annotations: SerializedAnnotations["annotations"];
+  colorChanges: Array<{
+    component: string;
+    file: string;
+    line: number;
+    property: string;
+    from: string;
+    to: string;
+    resolvedTo: ResolvedValue<string>;
+    pickedToken?: string;
   }>;
 }
