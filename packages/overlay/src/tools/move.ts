@@ -5,6 +5,7 @@
 
 import type { MoveEntry } from "../move-state.js";
 import { applyDragVisual, settleDragVisual } from "../move-state.js";
+import { addChangeEntry } from "../changelog.js";
 import {
   addMove,
   updateMoveDelta,
@@ -118,6 +119,17 @@ export function endMove(): HTMLElement | null {
   }
   settleDragVisual(dragEntry);
   clearSnapGuides();
+
+  // Add changelog entry — moves are pending (annotation, not source write)
+  addChangeEntry({
+    type: "move",
+    componentName: dragEntry.componentRef.componentName,
+    filePath: dragEntry.componentRef.filePath,
+    summary: `moved (${Math.round(dragEntry.delta.dx)}px, ${Math.round(dragEntry.delta.dy)}px)`,
+    state: "pending",
+    elementIdentity: dragEntry.identity,
+    revertData: { type: "moveRemove", moveId: dragEntry.id },
+  });
 
   const el = dragEntry.element;
   dragEntry = null;
