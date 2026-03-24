@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hexToRgb, rgbToLab, deltaE } from "../resolve-intent.js";
+import { hexToRgb, rgbToLab, deltaE, buildLabCache, resolveColor } from "../resolve-intent.js";
 
 describe("hexToRgb", () => {
   it("converts black", () => {
@@ -44,5 +44,44 @@ describe("deltaE", () => {
     const lab1 = rgbToLab(59, 130, 246);  // #3b82f6 (blue-500)
     const lab2 = rgbToLab(58, 130, 246);  // #3a82f6 (one off)
     expect(deltaE(lab1, lab2)).toBeLessThan(1);
+  });
+});
+
+describe("buildLabCache", () => {
+  it("filters non-hex values like transparent", () => {
+    const cache = buildLabCache({ "blue-500": "#3b82f6", "transparent": "transparent" });
+    expect(cache.size).toBe(1);
+  });
+});
+
+describe("resolveColor", () => {
+  const palette = { "blue-500": "#3b82f6", "red-500": "#ef4444", "white": "#ffffff", "black": "#000000" };
+  const cache = buildLabCache(palette);
+
+  it("exact match returns confidence 1.0", () => {
+    const result = resolveColor("#3b82f6", cache);
+    expect(result.type).toBe("exact");
+    expect(result.confidence).toBe(1.0);
+    expect(result.resolved).toBe("blue-500");
+  });
+
+  it("near match (Delta-E < 3) returns high confidence", () => {
+    const result = resolveColor("#3a82f6", cache);
+    expect(result.type).toBe("snapped");
+    expect(result.confidence).toBeGreaterThanOrEqual(0.95);
+    expect(result.resolved).toBe("blue-500");
+  });
+
+  it("distant color returns arbitrary", () => {
+    const result = resolveColor("#ff13ab", cache);
+    expect(result.type).toBe("arbitrary");
+    expect(result.confidence).toBe(0);
+    expect(result.resolved).toBeNull();
+  });
+
+  it("round-trip: perturbed blue-500 resolves back to blue-500", () => {
+    const result = resolveColor("#3a82f6", cache);
+    expect(result.resolved).toBe("blue-500");
+    expect(result.confidence).toBeGreaterThan(0.7);
   });
 });

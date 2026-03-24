@@ -60,3 +60,63 @@ export function deltaE(
     (lab1[2] - lab2[2]) ** 2,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Lab palette cache — built eagerly at session start
+// ---------------------------------------------------------------------------
+
+export type LabCache = Map<string, { token: string; lab: [number, number, number] }>;
+
+export function buildLabCache(colors: Record<string, string>): LabCache {
+  const cache: LabCache = new Map();
+  for (const [token, hex] of Object.entries(colors)) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) continue;
+    const [r, g, b] = hexToRgb(hex);
+    cache.set(hex.toLowerCase(), { token, lab: rgbToLab(r, g, b) });
+  }
+  return cache;
+}
+
+// ---------------------------------------------------------------------------
+// Color resolver
+// ---------------------------------------------------------------------------
+
+export function resolveColor(hex: string, cache: LabCache): ResolvedValue<string> {
+  const normalizedHex = hex.toLowerCase();
+
+  const exact = cache.get(normalizedHex);
+  if (exact) {
+    return {
+      raw: hex,
+      resolved: exact.token,
+      resolvedValue: normalizedHex,
+      confidence: 1.0,
+      type: "exact",
+    };
+  }
+
+  const [r, g, b] = hexToRgb(hex);
+  const inputLab = rgbToLab(r, g, b);
+
+  let bestToken: string | null = null;
+  let bestHex: string | null = null;
+  let bestDist = Infinity;
+
+  for (const [paletteHex, { token, lab }] of cache) {
+    const dist = deltaE(inputLab, lab);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestToken = token;
+      bestHex = paletteHex;
+    }
+  }
+
+  if (bestDist < 3) {
+    return { raw: hex, resolved: bestToken, resolvedValue: bestHex, confidence: 0.95, type: "snapped" };
+  }
+  if (bestDist < 8) {
+    return { raw: hex, resolved: bestToken, resolvedValue: bestHex, confidence: 0.7, type: "snapped" };
+  }
+
+  return { raw: hex, resolved: null, resolvedValue: null, confidence: 0, type: "arbitrary" };
+}
