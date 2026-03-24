@@ -2,6 +2,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { randomUUID } from "node:crypto";
 import type {
   ClientMessage,
   ServerMessage,
@@ -92,11 +93,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
           }
           const resolvedPath = resolveFilePath(msg.filePath, projectRoot);
           const prevContent = fs.readFileSync(resolvedPath, "utf-8");
-          undoStack.push({
-            filePath: resolvedPath,
-            content: prevContent,
-            timestamp: Date.now(),
-          });
+          const undoId = randomUUID();
 
           try {
             const newSource = reorderComponent(
@@ -105,10 +102,15 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               msg.toLine
             );
             fs.writeFileSync(resolvedPath, newSource, "utf-8");
+            undoStack.push({
+              id: undoId,
+              filePath: resolvedPath,
+              content: prevContent,
+              afterContent: newSource,
+              timestamp: Date.now(),
+            });
             send(ws, { type: "reorderComplete", success: true });
           } catch (err) {
-            // Revert undo stack on failure
-            undoStack.pop();
             send(ws, {
               type: "reorderComplete",
               success: false,
@@ -141,7 +143,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
           }
           const resolvedPropPath = resolveFilePath(msg.filePath, projectRoot);
           const prevContent = fs.readFileSync(resolvedPropPath, "utf-8");
-          undoStack.push({ filePath: resolvedPropPath, content: prevContent, timestamp: Date.now() });
+          const undoId = randomUUID();
           try {
             const newSource = updateClassName(resolvedPropPath, msg.lineNumber, msg.columnNumber, [{
               tailwindPrefix: msg.tailwindPrefix,
@@ -152,9 +154,9 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               standalone: msg.standalone,
             }]);
             fs.writeFileSync(resolvedPropPath, newSource, "utf-8");
-            send(ws, { type: "updatePropertyComplete", success: true });
+            undoStack.push({ id: undoId, filePath: resolvedPropPath, content: prevContent, afterContent: newSource, timestamp: Date.now() });
+            send(ws, { type: "updatePropertyComplete", success: true, undoId });
           } catch (err) {
-            undoStack.pop();
             const errorCode = extractErrorCode(err);
             send(ws, {
               type: "updatePropertyComplete",
@@ -174,7 +176,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
           }
           const resolvedPropsPath = resolveFilePath(msg.filePath, projectRoot);
           const prevContent = fs.readFileSync(resolvedPropsPath, "utf-8");
-          undoStack.push({ filePath: resolvedPropsPath, content: prevContent, timestamp: Date.now() });
+          const undoId = randomUUID();
           try {
             const newSource = updateClassName(
               resolvedPropsPath, msg.lineNumber, msg.columnNumber,
@@ -188,9 +190,9 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               }))
             );
             fs.writeFileSync(resolvedPropsPath, newSource, "utf-8");
-            send(ws, { type: "updatePropertyComplete", success: true });
+            undoStack.push({ id: undoId, filePath: resolvedPropsPath, content: prevContent, afterContent: newSource, timestamp: Date.now() });
+            send(ws, { type: "updatePropertyComplete", success: true, undoId });
           } catch (err) {
-            undoStack.pop();
             const errorCode = extractErrorCode(err);
             send(ws, {
               type: "updatePropertyComplete",
@@ -210,7 +212,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
           }
           const resolvedTextPath = resolveFilePath(msg.filePath, projectRoot);
           const prevContent = fs.readFileSync(resolvedTextPath, "utf-8");
-          undoStack.push({ filePath: resolvedTextPath, content: prevContent, timestamp: Date.now() });
+          const undoId = randomUUID();
           try {
             const newSource = updateTextContent(
               resolvedTextPath,
@@ -221,13 +223,13 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
             );
             if (newSource !== null) {
               fs.writeFileSync(resolvedTextPath, newSource, "utf-8");
-              send(ws, { type: "updateTextComplete", success: true });
+              undoStack.push({ id: undoId, filePath: resolvedTextPath, content: prevContent, afterContent: newSource, timestamp: Date.now() });
+              send(ws, { type: "updateTextComplete", success: true, undoId });
             } else {
-              undoStack.pop();
+              // no-match: no write happened, do not push undo entry
               send(ws, { type: "updateTextComplete", success: false, reason: "no-match" });
             }
           } catch (err) {
-            undoStack.pop();
             send(ws, {
               type: "updateTextComplete",
               success: false,
@@ -316,14 +318,18 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               send(ws, { type: "generateProgress", stage, message });
             },
           }).then((result) => {
-            // Push undo entries BEFORE unlocking (#3 — entries captured before API call)
+            const undoIds: string[] = [];
             if (result.success) {
               for (const entry of result.undoEntries) {
+                const undoId = randomUUID();
                 undoStack.push({
+                  id: undoId,
                   filePath: entry.filePath,
                   content: entry.content,
+                  afterContent: entry.afterContent,
                   timestamp: Date.now(),
                 });
+                undoIds.push(undoId);
               }
             }
             send(ws, {
@@ -331,6 +337,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               success: result.success,
               changes: result.changes,
               error: result.error,
+              undoIds: result.success ? undoIds : undefined,
             });
           }).catch((err) => {
             send(ws, {

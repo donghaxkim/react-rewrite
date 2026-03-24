@@ -22,6 +22,7 @@ interface GenerateOptions {
 export interface UndoFileEntry {
   filePath: string;
   content: string;
+  afterContent: string;
 }
 
 interface GenerateResult {
@@ -69,7 +70,8 @@ function readSourceFiles(
       const content = fs.readFileSync(resolved, "utf-8");
       sources.set(fp, content);
       // Save undo entry NOW, before any API call or file write (#3)
-      undoEntries.push({ filePath: resolved, content });
+      // afterContent will be filled in after the write
+      undoEntries.push({ filePath: resolved, content, afterContent: "" });
     } catch {
       console.warn(`[FrameUp] Could not read source file: ${fp}`);
     }
@@ -743,6 +745,9 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
 
         const finalContent = applyReplacements(originalContent!, change.replacements);
         fs.writeFileSync(resolved, finalContent, "utf-8");
+        // Update afterContent for the matching undo entry
+        const undoEntry = undoEntries.find(e => e.filePath === resolved);
+        if (undoEntry) undoEntry.afterContent = finalContent;
         appliedChanges.push({
           filePath: change.filePath,
           description: change.description || "Modified by AI",
@@ -764,6 +769,9 @@ export async function generate(options: GenerateOptions): Promise<GenerateResult
         }
 
         fs.writeFileSync(resolved, change.content, "utf-8");
+        // Update afterContent for the matching undo entry
+        const undoEntry = undoEntries.find(e => e.filePath === resolved);
+        if (undoEntry) undoEntry.afterContent = change.content;
         appliedChanges.push({
           filePath: change.filePath,
           description: change.description || "Modified by AI",
