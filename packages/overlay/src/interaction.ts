@@ -1,6 +1,5 @@
 // packages/overlay/src/interaction.ts
-import { getActiveTool, getToolOptions } from "./canvas-state.js";
-import { moveCursorSvg, drawCursorSvg } from "./design-tokens.js";
+
 import { getCachedElement, setCachedElement, clearElementCache } from "./utils/element-cache.js";
 import { isFullPageElement } from "./utils/component-filter.js";
 import { handleWheelZoom } from "./canvas-transform.js";
@@ -72,17 +71,8 @@ function updateCursor(tool: string): void {
   switch (tool) {
     case "pointer": interactionEl.style.cursor = "default"; break;
     case "grab": interactionEl.style.cursor = "grab"; break;
-    case "move": interactionEl.style.cursor = moveCursorSvg(); break;
-    case "draw": interactionEl.style.cursor = drawCursorSvg(getToolOptions().brushSize); break;
     case "text": interactionEl.style.cursor = "text"; break;
     default: interactionEl.style.cursor = "default";
-  }
-}
-
-/** Call when brush size changes to update the draw cursor */
-export function refreshDrawCursor(): void {
-  if (getActiveTool() === "draw" && interactionEl) {
-    interactionEl.style.cursor = drawCursorSvg(getToolOptions().brushSize);
   }
 }
 

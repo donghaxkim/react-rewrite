@@ -68,26 +68,6 @@ export const FONT_FACE_CSS = `
 
 // --- Cursor SVG Generators ---
 
-/** Move tool cursor: crosshair with arrows, accent colored */
-export function moveCursorSvg(): string {
-  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${COLORS.accent}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='5 9 2 12 5 15'/><polyline points='9 5 12 2 15 5'/><polyline points='15 19 12 22 9 19'/><polyline points='19 9 22 12 19 15'/><line x1='2' y1='12' x2='22' y2='12'/><line x1='12' y1='2' x2='12' y2='22'/></svg>`)}") 12 12, move`;
-}
-
-/** Draw tool cursor: circle matching brush size */
-let cachedDrawCursor: { size: number; uri: string } | null = null;
-
-export function drawCursorSvg(brushSize: number): string {
-  if (cachedDrawCursor && cachedDrawCursor.size === brushSize) {
-    return cachedDrawCursor.uri;
-  }
-  const r = Math.max(brushSize, 2);
-  const svgSize = r * 2 + 4;
-  const center = svgSize / 2;
-  const uri = `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='${svgSize}' height='${svgSize}'><circle cx='${center}' cy='${center}' r='${r}' fill='none' stroke='${COLORS.accent}' stroke-width='1.5'/></svg>`)}") ${center} ${center}, crosshair`;
-  cachedDrawCursor = { size: brushSize, uri };
-  return uri;
-}
-
 /** Color tool cursor: eyedropper */
 export function colorCursorSvg(): string {
   return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='${COLORS.accent}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'><path d='M2 22l1-1h3l9-9'/><path d='M13 7l-1.3-1.3a1 1 0 0 0-1.4 0L9 7'/><path d='M16 10l1.3 1.3a1 1 0 0 1 0 1.4L16 14'/><path d='m9 7 6 6'/><path d='M20 2a2.83 2.83 0 0 1 0 4L16 10'/></svg>`)}") 2 22, pointer`;

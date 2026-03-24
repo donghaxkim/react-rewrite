@@ -43,30 +43,6 @@ function syncTransform(): void {
   );
 }
 
-export function addStrokePath(
-  id: string,
-  points: Array<{ x: number; y: number }>,
-  color: string,
-  strokeWidth: number
-): SVGGElement | null {
-  if (!rootGroup || points.length < 2) return null;
-
-  const g = document.createElementNS(SVG_NS, "g");
-  g.setAttribute("data-annotation-id", id);
-
-  const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("d", pointsToPathD(points));
-  path.setAttribute("stroke", color);
-  path.setAttribute("stroke-width", String(strokeWidth));
-  path.setAttribute("stroke-linecap", "round");
-  path.setAttribute("stroke-linejoin", "round");
-  path.setAttribute("fill", "none");
-
-  g.appendChild(path);
-  rootGroup.appendChild(g);
-  return g;
-}
-
 export function addTextAnnotation(
   id: string,
   x: number,
@@ -145,41 +121,3 @@ export function destroyAnnotationLayer(): void {
   rootGroup = null;
 }
 
-function pointsToPathD(points: Array<{ x: number; y: number }>): string {
-  if (points.length === 0) return "";
-  let d = `M${points[0].x},${points[0].y}`;
-  for (let i = 1; i < points.length; i++) {
-    d += ` L${points[i].x},${points[i].y}`;
-  }
-  return d;
-}
-
-export function createLivePath(color: string, strokeWidth: number): {
-  path: SVGPathElement;
-  group: SVGGElement;
-  addPoint: (x: number, y: number) => void;
-  getPoints: () => Array<{ x: number; y: number }>;
-} | null {
-  if (!rootGroup) return null;
-
-  const points: Array<{ x: number; y: number }> = [];
-  const g = document.createElementNS(SVG_NS, "g");
-  const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("stroke", color);
-  path.setAttribute("stroke-width", String(strokeWidth));
-  path.setAttribute("stroke-linecap", "round");
-  path.setAttribute("stroke-linejoin", "round");
-  path.setAttribute("fill", "none");
-  g.appendChild(path);
-  rootGroup.appendChild(g);
-
-  return {
-    path,
-    group: g,
-    addPoint(x: number, y: number) {
-      points.push({ x, y });
-      path.setAttribute("d", pointsToPathD(points));
-    },
-    getPoints() { return points; },
-  };
-}
