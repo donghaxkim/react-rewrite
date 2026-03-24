@@ -6,11 +6,13 @@ import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-token
 import { openColorPicker } from "./color-picker.js";
 import { toggleCanvasTransform, isCanvasActive } from "./canvas-transform.js";
 import { isTextEditing } from "./inline-text-edit.js";
+import { getActiveCount, isChangelogOpen, onChangelogChange, setChangelogOpen } from "./changelog.js";
 
 const ICONS = {
   pointer: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13.9093 12.3603L17.0007 20.8537L14.1816 21.8798L11.0902 13.3864L6.91797 16.5422L8.4087 1.63318L19.134 12.0959L13.9093 12.3603Z"></path></svg>`,
   text: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 6V21H11V6H5V4H19V6H13Z"></path></svg>`,
   canvas: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M21 3C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H21ZM11 13H4V19H11V13ZM20 13H13V19H20V13ZM11 5H4V11H11V5ZM20 5H13V11H20V5Z"></path></svg>`,
+  logs: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 6h12"></path><path d="M7 12h12"></path><path d="M7 18h12"></path><path d="M3.5 6h.01"></path><path d="M3.5 12h.01"></path><path d="M3.5 18h.01"></path></svg>`,
   undo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7.18,4,8.6,5.44,6.06,8h9.71a6,6,0,0,1,0,12h-2V18h2a4,4,0,0,0,0-8H6.06L8.6,12.51,7.18,13.92,2.23,9Z"></path></svg>`,
   reset: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12C22 17.5228 17.5229 22 12 22C6.4772 22 2 17.5228 2 12C2 6.47715 6.4772 2 12 2V4C7.5817 4 4 7.58172 4 12C4 16.4183 7.5817 20 12 20C16.4183 20 20 16.4183 20 12C20 9.53614 18.8862 7.33243 17.1346 5.86492L15 8V2L21 2L18.5535 4.44656C20.6649 6.28002 22 8.9841 22 12Z"></path></svg>`,
 };
@@ -201,10 +203,37 @@ const PANEL_STYLES = `
     background: ${COLORS.bgSecondary};
     color: ${COLORS.textPrimary};
   }
+  .action-btn.active {
+    background: ${COLORS.accentSoft};
+    color: ${COLORS.accent};
+  }
   .action-btn:disabled {
     opacity: 0.3;
     cursor: default;
     pointer-events: none;
+  }
+  .action-btn.has-badge {
+    position: relative;
+  }
+  .action-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: ${COLORS.accent};
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 14px;
+    text-align: center;
+    box-sizing: border-box;
+    pointer-events: none;
+  }
+  .action-badge.hidden {
+    display: none;
   }
   .action-btn.danger:hover {
     background: ${COLORS.dangerSoft};
@@ -320,14 +349,25 @@ let panelEl: HTMLDivElement | null = null;
 let subOptionsEl: HTMLDivElement | null = null;
 let toolButtons: Map<ToolType, HTMLButtonElement> = new Map();
 let canvasUndoBtn: HTMLButtonElement | null = null;
+let logsBtn: HTMLButtonElement | null = null;
+let logsBadgeEl: HTMLSpanElement | null = null;
 let onClearAll: (() => void) | null = null;
 let onCanvasUndo: (() => void) | null = null;
+let cleanupChangelogSubscription: (() => void) | null = null;
 
 export function setOnClearAll(fn: () => void): void { onClearAll = fn; }
 export function setOnCanvasUndo(fn: () => void): void { onCanvasUndo = fn; }
 
 export function updateCanvasUndoButton(enabled: boolean): void {
   if (canvasUndoBtn) canvasUndoBtn.disabled = !enabled;
+}
+
+function updateLogsButton(): void {
+  if (!logsBtn || !logsBadgeEl) return;
+  const activeCount = getActiveCount();
+  logsBtn.classList.toggle("active", isChangelogOpen());
+  logsBadgeEl.classList.toggle("hidden", activeCount === 0);
+  logsBadgeEl.textContent = String(activeCount);
 }
 
 export function initToolsPanel(): void {
@@ -391,6 +431,16 @@ export function initToolsPanel(): void {
   canvasUndoBtn.addEventListener("click", () => { if (onCanvasUndo) onCanvasUndo(); });
   panelEl.appendChild(canvasUndoBtn);
 
+  logsBtn = document.createElement("button");
+  logsBtn.className = "action-btn has-badge";
+  logsBtn.innerHTML = `${ICONS.logs}<span class="action-badge hidden">0</span>`;
+  logsBtn.title = "Logs";
+  logsBtn.addEventListener("click", () => {
+    setChangelogOpen(!isChangelogOpen());
+  });
+  logsBadgeEl = logsBtn.querySelector(".action-badge");
+  panelEl.appendChild(logsBtn);
+
   const clearBtn = document.createElement("button");
   clearBtn.className = "action-btn danger";
   clearBtn.innerHTML = ICONS.reset;
@@ -419,6 +469,8 @@ export function initToolsPanel(): void {
 
   shadowRoot.appendChild(panelEl);
   document.addEventListener("keydown", handleToolShortcut, true);
+  cleanupChangelogSubscription = onChangelogChange(updateLogsButton);
+  updateLogsButton();
 }
 
 function handleToolShortcut(e: KeyboardEvent): void {
@@ -488,6 +540,7 @@ function openShortcutsOverlay(): void {
       label: "Actions",
       items: [
         { action: "Undo", keys: [MOD_LABEL, "Z"] },
+        { action: "Toggle Logs", keys: [MOD_LABEL, "Shift", "L"] },
         { action: "Keyboard Shortcuts", keys: ["?"] },
         { action: "Cancel / Deselect", keys: ["Esc"] },
       ],
@@ -635,9 +688,14 @@ export function flashToolButton(tool: ToolType): void {
 
 export function destroyToolsPanel(): void {
   document.removeEventListener("keydown", handleToolShortcut, true);
+  cleanupChangelogSubscription?.();
+  cleanupChangelogSubscription = null;
   closeShortcutsOverlay();
   panelEl?.remove();
   panelEl = null;
   subOptionsEl = null;
+  canvasUndoBtn = null;
+  logsBtn = null;
+  logsBadgeEl = null;
   toolButtons.clear();
 }

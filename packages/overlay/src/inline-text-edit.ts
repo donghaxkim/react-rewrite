@@ -6,8 +6,8 @@ import { COLORS } from "./design-tokens.js";
 import { setInteractionPointerEvents, activateInteraction, getPageElementAtPoint } from "./interaction.js";
 import { getActiveTool } from "./canvas-state.js";
 import { addTextEditAnnotation } from "./canvas-state.js";
-import { isInternalName } from "./utils/component-filter.js";
-import { selectElement } from "./selection.js";
+import { isInternalName, isValidElement } from "./utils/component-filter.js";
+import { clearSelection, selectElement } from "./selection.js";
 import { addChangeEntry } from "./changelog.js";
 
 // --- Helpers ---
@@ -48,6 +48,7 @@ export function isTextEditing(): boolean {
 
 export function initInlineTextEdit(): void {
   document.addEventListener("dblclick", handleDblClick, true);
+  document.addEventListener("mousedown", handleOutsidePointerDown, true);
   unsubscribeMessage = onMessage((msg: ServerMessage) => {
     if (msg.type === "updateTextComplete") {
       handleUpdateTextResponse(msg);
@@ -60,6 +61,7 @@ export function destroyInlineTextEdit(): void {
     exitEditMode();
   }
   document.removeEventListener("dblclick", handleDblClick, true);
+  document.removeEventListener("mousedown", handleOutsidePointerDown, true);
   unsubscribeMessage?.();
   unsubscribeMessage = null;
 }
@@ -275,6 +277,36 @@ function handleBlur(): void {
   commitAndExit();
 }
 
+function handleOutsidePointerDown(e: MouseEvent): void {
+  if (!editingElement) return;
+
+  const eventTarget = e.target;
+  if (
+    eventTarget instanceof Node &&
+    (eventTarget === editingElement || editingElement.contains(eventTarget))
+  ) {
+    return;
+  }
+
+  const targetElement = eventTarget instanceof HTMLElement ? eventTarget : null;
+  if (targetElement?.closest("#frameup-root")) {
+    commitAndExit();
+    return;
+  }
+
+  const clickedElement = resolveClickTarget(e);
+  if (clickedElement && isValidElement(clickedElement)) {
+    e.preventDefault();
+    e.stopPropagation();
+    commitAndExit({ nextSelection: clickedElement, reselectEditedElement: false });
+    return;
+  }
+
+  e.preventDefault();
+  e.stopPropagation();
+  commitAndExit({ clearSelection: true, reselectEditedElement: false });
+}
+
 function handleKeydown(e: KeyboardEvent): void {
   if (e.key === "Escape") {
     e.preventDefault();
@@ -291,7 +323,25 @@ function handleKeydown(e: KeyboardEvent): void {
   e.stopPropagation();
 }
 
-function commitAndExit(): void {
+function resolveClickTarget(e: MouseEvent): HTMLElement | null {
+  const eventTarget = e.target;
+  if (
+    eventTarget instanceof HTMLElement &&
+    eventTarget !== document.documentElement &&
+    eventTarget !== document.body &&
+    !eventTarget.hasAttribute("data-frameup-interaction") &&
+    !eventTarget.closest("#frameup-root")
+  ) {
+    return eventTarget;
+  }
+  return getPageElementAtPoint(e.clientX, e.clientY);
+}
+
+function commitAndExit(options?: {
+  nextSelection?: HTMLElement | null;
+  clearSelection?: boolean;
+  reselectEditedElement?: boolean;
+}): void {
   if (!editingElement) return;
 
   const newText = lastKnownText;
@@ -354,7 +404,18 @@ function commitAndExit(): void {
 
   const elementToSelect = editingElement;
   exitEditMode();
-  // After exiting edit mode, highlight the element as selected
+  if (options?.nextSelection && document.contains(options.nextSelection)) {
+    selectElement(options.nextSelection, { skipSidebar: false });
+    return;
+  }
+  if (options?.clearSelection) {
+    clearSelection();
+    return;
+  }
+  if (options?.reselectEditedElement === false) {
+    return;
+  }
+  // After exiting edit mode, highlight the edited element as selected
   if (elementToSelect && document.contains(elementToSelect)) {
     selectElement(elementToSelect, { skipSidebar: false });
   }

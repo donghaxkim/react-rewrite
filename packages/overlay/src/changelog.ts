@@ -187,14 +187,15 @@ let styleEl: HTMLElement | null = null;
 const CHANGELOG_STYLES = `
   .changelog-panel {
     position: fixed;
-    left: 16px;
+    top: 16px;
+    right: 16px;
     bottom: 16px;
-    width: 360px;
-    max-height: 50vh;
-    background: ${COLORS.bgSecondary};
+    width: 380px;
+    max-width: min(380px, calc(100vw - 32px));
+    background: ${COLORS.bgPrimary};
     border: 1px solid ${COLORS.border};
-    border-radius: ${RADII.md};
-    box-shadow: ${SHADOWS.md};
+    border-radius: ${RADII.lg};
+    box-shadow: ${SHADOWS.lg};
     z-index: 2147483646;
     display: flex;
     flex-direction: column;
@@ -202,31 +203,50 @@ const CHANGELOG_STYLES = `
     font-size: 12px;
     user-select: none;
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateX(16px);
     transition: opacity ${TRANSITIONS.settle}, transform ${TRANSITIONS.settle};
+    overflow: hidden;
   }
   .changelog-panel.visible {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(0);
+  }
+  .changelog-panel.collapsed {
+    bottom: auto;
+    width: 320px;
   }
   .changelog-header {
     display: flex;
     align-items: center;
-    padding: 8px 10px;
+    justify-content: space-between;
+    padding: 12px 14px;
     cursor: pointer;
-    gap: 6px;
-    border-bottom: 1px solid transparent;
-    transition: border-color ${TRANSITIONS.fast};
+    gap: 10px;
+    border-bottom: 1px solid ${COLORS.border};
+    background: ${COLORS.bgSecondary};
+    transition: background ${TRANSITIONS.fast};
     flex-shrink: 0;
   }
-  .changelog-panel.open .changelog-header {
-    border-bottom-color: ${COLORS.border};
+  .changelog-header:hover {
+    background: ${COLORS.bgTertiary};
+  }
+  .changelog-header-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+  .changelog-header-icon {
+    width: 18px;
+    height: 18px;
+    color: ${COLORS.accent};
+    flex-shrink: 0;
   }
   .changelog-title {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: ${COLORS.textPrimary};
-    flex: 1;
   }
   .changelog-badge {
     background: ${COLORS.accent};
@@ -241,6 +261,10 @@ const CHANGELOG_STYLES = `
   .changelog-badge.hidden {
     display: none;
   }
+  .changelog-header-copy {
+    color: ${COLORS.textTertiary};
+    font-size: 11px;
+  }
   .changelog-chevron {
     width: 14px;
     height: 14px;
@@ -248,23 +272,23 @@ const CHANGELOG_STYLES = `
     transition: transform ${TRANSITIONS.medium};
     flex-shrink: 0;
   }
-  .changelog-panel.open .changelog-chevron {
+  .changelog-panel:not(.collapsed) .changelog-chevron {
     transform: rotate(180deg);
   }
   .changelog-body {
+    flex: 1;
     overflow-y: auto;
-    max-height: calc(50vh - 37px);
-    display: none;
+    background: ${COLORS.bgPrimary};
   }
-  .changelog-panel.open .changelog-body {
-    display: block;
+  .changelog-panel.collapsed .changelog-body {
+    display: none;
   }
   .changelog-entry {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    height: 28px;
+    gap: 8px;
+    padding: 0 12px;
+    min-height: 38px;
     border-bottom: 1px solid ${COLORS.border};
     transition: background ${TRANSITIONS.fast};
   }
@@ -290,6 +314,7 @@ const CHANGELOG_STYLES = `
     white-space: nowrap;
     color: ${COLORS.textSecondary};
     min-width: 0;
+    line-height: 1.3;
   }
   .component-name {
     color: ${COLORS.textPrimary};
@@ -302,7 +327,7 @@ const CHANGELOG_STYLES = `
     color: ${COLORS.textTertiary};
     flex-shrink: 0;
     font-size: 11px;
-    max-width: 80px;
+    max-width: 96px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -340,6 +365,15 @@ const CHANGELOG_STYLES = `
   .changelog-entry.reverted .entry-revert {
     display: none;
   }
+  .changelog-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    padding: 16px;
+    color: ${COLORS.textTertiary};
+    text-align: center;
+  }
 `;
 
 // ---------------------------------------------------------------------------
@@ -370,7 +404,7 @@ function renderEntries(): void {
   if (!bodyEl) return;
   const allEntries = Array.from(entries.values()).reverse();
   if (allEntries.length === 0) {
-    bodyEl.innerHTML = "";
+    bodyEl.innerHTML = `<div class="changelog-empty">No logs yet. Changes will appear here.</div>`;
     return;
   }
   bodyEl.innerHTML = allEntries
@@ -455,20 +489,36 @@ export function initChangelog(shadowRoot: ShadowRoot): void {
   // Panel
   panelEl = document.createElement("div");
   panelEl.className = "changelog-panel";
-  // Hidden until first entry
   panelEl.style.display = "none";
 
   // Header
   const headerEl = document.createElement("div");
   headerEl.className = "changelog-header";
 
+  const headerMainEl = document.createElement("div");
+  headerMainEl.className = "changelog-header-main";
+
+  const iconEl = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  iconEl.classList.add("changelog-header-icon");
+  iconEl.setAttribute("viewBox", "0 0 24 24");
+  iconEl.setAttribute("fill", "none");
+  iconEl.setAttribute("stroke", "currentColor");
+  iconEl.setAttribute("stroke-width", "1.7");
+  iconEl.setAttribute("stroke-linecap", "round");
+  iconEl.setAttribute("stroke-linejoin", "round");
+  iconEl.innerHTML = `<path d="M7 6h12"></path><path d="M7 12h12"></path><path d="M7 18h12"></path><path d="M3.5 6h.01"></path><path d="M3.5 12h.01"></path><path d="M3.5 18h.01"></path>`;
+
   const titleEl = document.createElement("span");
   titleEl.className = "changelog-title";
-  titleEl.textContent = "Changes";
+  titleEl.textContent = "Logs";
 
   countEl = document.createElement("span");
   countEl.className = "changelog-badge hidden";
   countEl.textContent = "0";
+
+  const copyEl = document.createElement("span");
+  copyEl.className = "changelog-header-copy";
+  copyEl.textContent = "Latest changes";
 
   chevronEl = document.createElement("svg");
   chevronEl.className = "changelog-chevron";
@@ -476,8 +526,11 @@ export function initChangelog(shadowRoot: ShadowRoot): void {
   chevronEl.setAttribute("fill", "currentColor");
   chevronEl.innerHTML = `<path d="M3.5 5.5L8 10l4.5-4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>`;
 
-  headerEl.appendChild(titleEl);
-  headerEl.appendChild(countEl);
+  headerMainEl.appendChild(iconEl);
+  headerMainEl.appendChild(titleEl);
+  headerMainEl.appendChild(countEl);
+  headerMainEl.appendChild(copyEl);
+  headerEl.appendChild(headerMainEl);
   headerEl.appendChild(chevronEl);
   headerEl.addEventListener("click", () => setChangelogOpen(!panelOpen));
 
@@ -497,29 +550,20 @@ export function initChangelog(shadowRoot: ShadowRoot): void {
 
     if (!panelEl) return;
 
-    // Show panel on first entry
-    if (entries.size > 0 && panelEl.style.display === "none") {
+    if (panelOpen && panelEl.style.display === "none") {
       panelEl.style.display = "";
-      // Trigger animation on next frame
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           panelEl?.classList.add("visible");
         });
       });
-      // Open panel on first entry if not already open
-      if (!panelOpen) {
-        setChangelogOpen(true);
-        return; // setChangelogOpen triggers another notify, avoid double update
-      }
-    } else if (entries.size === 0) {
+    } else if (!panelOpen) {
       panelEl.style.display = "none";
       panelEl.classList.remove("visible");
     }
 
-    // Toggle open/closed
-    panelEl.classList.toggle("open", panelOpen);
+    panelEl.classList.toggle("collapsed", !panelOpen);
 
-    // Start/stop interval based on open state
     if (panelOpen && timeUpdateInterval === null) {
       timeUpdateInterval = window.setInterval(() => {
         renderEntries();
