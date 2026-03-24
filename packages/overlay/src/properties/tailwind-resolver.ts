@@ -343,3 +343,24 @@ export function getTokenMap(): MergedTokenMap {
   mergedMap = mergeTokenMaps(browserTokens, cliTokens ?? {});
   return mergedMap;
 }
+
+/**
+ * Returns custom/overridden project colors from the CLI-supplied Tailwind config.
+ * Filters to colors with non-standard token names (not part of Tailwind's default palette).
+ * Returns array of { token, hex } suitable for color picker swatches.
+ */
+export function getProjectColors(): Array<{ token: string; hex: string }> {
+  if (!cliTokens?.colors) return [];
+
+  const colors: Array<{ token: string; hex: string }> = [];
+  for (const [token, hex] of Object.entries(cliTokens.colors)) {
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) continue;
+    // Standard Tailwind tokens match pattern: colorFamily-shade (e.g., "blue-500")
+    // Custom tokens often don't (e.g., "brand", "primary", "accent-foreground")
+    const isStandardPattern = /^(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d+$/.test(token);
+    if (!isStandardPattern && token !== "white" && token !== "black" && token !== "transparent") {
+      colors.push({ token, hex });
+    }
+  }
+  return colors;
+}
