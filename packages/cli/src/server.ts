@@ -10,7 +10,7 @@ import type {
   TailwindTokenMap,
 } from "@frameup/shared";
 import { reorderComponent, getSiblings } from "./transform.js";
-import { updateClassName } from "./transform.js";
+import { updateClassName, updateTextContent } from "./transform.js";
 import { resolveTailwindConfig } from "./tailwind-resolver.js";
 import { generate } from "./generate.js";
 
@@ -200,6 +200,41 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
           }
           break;
         }
+
+        case "updateText": {
+          if (!isPathSafe(msg.filePath, projectRoot)) {
+            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
+            send(ws, { type: "updateTextComplete", success: false, error: "File path is outside the project root" });
+            break;
+          }
+          const resolvedTextPath = resolveFilePath(msg.filePath, projectRoot);
+          const prevContent = fs.readFileSync(resolvedTextPath, "utf-8");
+          undoStack.push({ filePath: resolvedTextPath, content: prevContent, timestamp: Date.now() });
+          try {
+            const newSource = updateTextContent(
+              resolvedTextPath,
+              msg.lineNumber,
+              msg.columnNumber,
+              msg.originalText,
+              msg.newText,
+            );
+            if (newSource !== null) {
+              fs.writeFileSync(resolvedTextPath, newSource, "utf-8");
+              send(ws, { type: "updateTextComplete", success: true });
+            } else {
+              undoStack.pop();
+              send(ws, { type: "updateTextComplete", success: false, reason: "no-match" });
+            }
+          } catch (err) {
+            undoStack.pop();
+            send(ws, {
+              type: "updateTextComplete",
+              success: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+          break;
+        }
       }
     } catch (err) {
       // Catch-all for unexpected errors
@@ -314,6 +349,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "undo":
         case "updateProperty":
         case "updateProperties":
+        case "updateText":
           // Sequential processing
           queue.push({ msg, ws });
           processQueue();
