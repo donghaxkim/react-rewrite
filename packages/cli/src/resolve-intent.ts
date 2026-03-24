@@ -331,7 +331,7 @@ export function resolveIntent(
   const colorChanges = annotations.colorChanges.map((cc) => {
     let resolvedTo: ResolvedValue<string>;
 
-    if (hasAlpha(cc.to)) {
+    if (hasAlpha(cc.to) || hasAlpha(cc.from)) {
       resolvedTo = { raw: cc.to, resolved: null, resolvedValue: null, confidence: 0, type: "arbitrary" as const };
     } else {
       resolvedTo = resolveColorChange(cc.to, cc.pickedToken, colorsForward, labCache);
