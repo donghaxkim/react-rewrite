@@ -22,7 +22,7 @@ import {
   getOriginalsHidden, setOriginalsHidden, onAnnotationRemoved,
   getMoves, removeMove,
 } from "./canvas-state.js";
-import { initPropertyController } from "./properties/property-controller.js";
+import { initPropertyController, destroyPropertyController } from "./properties/property-controller.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { initInlineTextEdit, destroyInlineTextEdit } from "./inline-text-edit.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
@@ -360,6 +360,7 @@ function close(): void {
   deactivateSelection();
   destroyHighlightCanvas();
   deactivateDrag();
+  destroyPropertyController();
   destroyAnnotationLayer();
   moveObserver?.disconnect();
   destroyToolsPanel();

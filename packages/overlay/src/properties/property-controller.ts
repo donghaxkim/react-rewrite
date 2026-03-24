@@ -5,7 +5,8 @@ import { renderSections, isGroupCollapsed, onSectionExpand } from "./section-ren
 import { createSidebar } from "./property-sidebar.js";
 import { getTokenMap, resolveTokenForValue } from "./tailwind-resolver.js";
 import type { MergedTokenMap } from "./tailwind-resolver.js";
-import { send, onCommitResult } from "../bridge.js";
+import { send, onCommitResult, onMessage } from "../bridge.js";
+import { addOrCoalescePropertyEntry } from "../changelog.js";
 import type { PropertyControl } from "./controls/types.js";
 import { pushUndoAction, type PropertyChangeRuntime } from "../canvas-state.js";
 import { dismissOnboarding } from "../onboarding.js";
@@ -101,8 +102,18 @@ let inflightCommit: {
   timeoutId: ReturnType<typeof setTimeout>;
 } | null = null;
 
+// Snapshot of commit data saved just before send(), used by onMessage handler
+// (onCommitResult fires before onMessage, clearing inflightCommit — so we snapshot here)
+let lastCommitSnapshot: {
+  componentInfo: ComponentInfo;
+  batch: Array<{ cssProperty: string; originalValue: string; value: string }>;
+} | null = null;
+
 // Cleanup for section-expand listener
 let cleanupExpandListener: (() => void) | null = null;
+
+// Cleanup for changelog onMessage listener
+let cleanupChangelogListener: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
 // HMR survival observer
@@ -424,6 +435,39 @@ export function initPropertyController(shadowRoot: ShadowRoot): void {
       sidebar.showWarning(msg, "Dismiss", () => sidebar.clearWarning());
     }
   });
+
+  // Listen for successful commits to add changelog entries
+  cleanupChangelogListener = onMessage((msg) => {
+    if (msg.type === "updatePropertyComplete" && msg.success && msg.undoId && lastCommitSnapshot) {
+      const { componentInfo, batch } = lastCommitSnapshot;
+      const identity = {
+        componentName: componentInfo.componentName,
+        filePath: componentInfo.filePath,
+        lineNumber: componentInfo.lineNumber,
+        columnNumber: componentInfo.columnNumber,
+        tagName: componentInfo.tagName,
+      };
+
+      for (const update of batch) {
+        addOrCoalescePropertyEntry(
+          {
+            type: "property",
+            componentName: componentInfo.componentName,
+            filePath: componentInfo.filePath,
+            summary: `${update.cssProperty}: ${update.originalValue} → ${update.value}`,
+            state: "active",
+            propertyKey: update.cssProperty,
+            elementIdentity: identity,
+            revertData: { type: "cliUndo", undoIds: [msg.undoId] },
+          },
+          identity,
+          update.cssProperty,
+          msg.undoId,
+        );
+      }
+      lastCommitSnapshot = null;
+    }
+  });
 }
 
 /**
@@ -576,6 +620,16 @@ export function commit(): void {
   const lineNumber = state.componentInfo.lineNumber;
   const columnNumber = state.componentInfo.columnNumber - 1; // Convert 1-indexed to 0-indexed
 
+  // Save snapshot before send — onCommitResult fires before onMessage, clearing inflightCommit
+  lastCommitSnapshot = {
+    componentInfo: { ...state.componentInfo },
+    batch: [...state.pendingBatch.values()].map((u) => ({
+      cssProperty: u.cssProperty,
+      originalValue: u.originalValue,
+      value: u.value,
+    })),
+  };
+
   if (state.pendingBatch.size === 1) {
     const update = [...state.pendingBatch.values()][0];
     const desc = DESCRIPTOR_MAP.get(update.property);
@@ -717,4 +771,17 @@ export function hasActiveOverrides(): boolean {
 export function setShowAllGroups(showAll: boolean): void {
   state.showAllGroups = showAll;
   rerenderSections();
+}
+
+/**
+ * Tears down the property controller — cleans up module-level listeners.
+ * Call once during overlay teardown.
+ */
+export function destroyPropertyController(): void {
+  if (cleanupChangelogListener) {
+    cleanupChangelogListener();
+    cleanupChangelogListener = null;
+  }
+  lastCommitSnapshot = null;
+  deselect();
 }
