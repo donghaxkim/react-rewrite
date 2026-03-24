@@ -530,3 +530,56 @@ export function updateClassName(
 
   throw new Error(`Unsupported className value type: ${attrValue.type}`);
 }
+
+// ── updateTextContent ────────────────────────────────────────────────────
+
+/**
+ * Replace text content of a JSX element at the given source position.
+ * Returns the new source string, or null if no matching text child was found.
+ */
+export function updateTextContent(
+  filePath: string,
+  lineNumber: number,
+  columnNumber: number,
+  originalText: string,
+  newText: string,
+): string | null {
+  const source = fs.readFileSync(filePath, "utf-8");
+  const parser = getParser(filePath);
+  const j = jscodeshift.withParser(parser);
+  const root = j(source);
+  const quoteStyle = detectQuoteStyle(source);
+
+  let target: any = null;
+  root.find(j.JSXElement).forEach((p) => {
+    const loc = p.node.openingElement.loc;
+    if (loc && loc.start.line === lineNumber && loc.start.column === columnNumber) {
+      target = p;
+    }
+  });
+
+  if (!target) return null;
+
+  const children = target.node.children;
+  if (!children) return null;
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.type === "JSXText") {
+      if (child.value.trim() === originalText.trim()) {
+        child.value = child.value.replace(child.value.trim(), newText);
+        return root.toSource({ quote: quoteStyle });
+      }
+    }
+    if (
+      child.type === "JSXExpressionContainer" &&
+      child.expression.type === "StringLiteral" &&
+      child.expression.value === originalText
+    ) {
+      child.expression.value = newText;
+      return root.toSource({ quote: quoteStyle });
+    }
+  }
+
+  return null;
+}
