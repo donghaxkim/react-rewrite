@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hexToRgb, rgbToLab, deltaE, buildLabCache, resolveColor } from "../resolve-intent.js";
+import { hexToRgb, rgbToLab, deltaE, buildLabCache, resolveColor, buildSpacingCache, resolveSpacing } from "../resolve-intent.js";
 
 describe("hexToRgb", () => {
   it("converts black", () => {
@@ -83,5 +83,51 @@ describe("resolveColor", () => {
     const result = resolveColor("#3a82f6", cache);
     expect(result.resolved).toBe("blue-500");
     expect(result.confidence).toBeGreaterThan(0.7);
+  });
+});
+
+describe("buildSpacingCache", () => {
+  it("parses rem values to pixels", () => {
+    const cache = buildSpacingCache({ "4": "1rem", "px": "1px", "0": "0px" });
+    expect(cache.get(16)).toEqual({ token: "4", value: "1rem" });
+    expect(cache.get(1)).toEqual({ token: "px", value: "1px" });
+    expect(cache.get(0)).toEqual({ token: "0", value: "0px" });
+  });
+});
+
+describe("resolveSpacing", () => {
+  const spacing = { "0": "0px", "px": "1px", "1": "0.25rem", "4": "1rem", "8": "2rem", "16": "4rem" };
+  const cache = buildSpacingCache(spacing);
+
+  it("exact match returns confidence 1.0", () => {
+    const result = resolveSpacing(16, cache);
+    expect(result.type).toBe("exact");
+    expect(result.resolved).toBe("4");
+    expect(result.confidence).toBe(1.0);
+  });
+
+  it("within relative threshold snaps with high confidence", () => {
+    const result = resolveSpacing(17, cache);
+    expect(result.type).toBe("snapped");
+    expect(result.resolved).toBe("4");
+    expect(result.confidence).toBeGreaterThan(0.75);
+  });
+
+  it("outside threshold returns arbitrary", () => {
+    const result = resolveSpacing(137, cache);
+    expect(result.type).toBe("arbitrary");
+    expect(result.confidence).toBe(0);
+    expect(result.resolved).toBeNull();
+  });
+
+  it("small spacing has tight threshold", () => {
+    const result = resolveSpacing(6, cache);
+    expect(result.type).toBe("arbitrary");
+  });
+
+  it("large spacing has wider threshold", () => {
+    const result = resolveSpacing(70, cache);
+    expect(result.type).toBe("snapped");
+    expect(result.resolved).toBe("16");
   });
 });

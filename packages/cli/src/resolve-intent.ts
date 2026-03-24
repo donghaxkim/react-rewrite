@@ -120,3 +120,70 @@ export function resolveColor(hex: string, cache: LabCache): ResolvedValue<string
 
   return { raw: hex, resolved: null, resolvedValue: null, confidence: 0, type: "arbitrary" };
 }
+
+// ---------------------------------------------------------------------------
+// Spacing cache — parsed token values in pixels, built at session start
+// ---------------------------------------------------------------------------
+
+// Assumption: root font size is 16px (browser default).
+// If a project uses a different root font size (e.g., html { font-size: 14px }),
+// spacing resolution will be slightly off. This is a known limitation.
+const ROOT_FONT_SIZE_PX = 16;
+
+export type SpacingCache = Map<number, { token: string; value: string }>;
+
+export function buildSpacingCache(spacing: Record<string, string>): SpacingCache {
+  const cache: SpacingCache = new Map();
+  for (const [token, value] of Object.entries(spacing)) {
+    let px: number;
+    if (value.endsWith("rem")) {
+      px = parseFloat(value) * ROOT_FONT_SIZE_PX;
+    } else if (value.endsWith("px")) {
+      px = parseFloat(value);
+    } else {
+      continue;
+    }
+    if (!Number.isNaN(px)) {
+      cache.set(px, { token, value });
+    }
+  }
+  return cache;
+}
+
+// ---------------------------------------------------------------------------
+// Spacing resolver — relative threshold: min(tokenPx * 0.15, 8)
+// ---------------------------------------------------------------------------
+
+export function resolveSpacing(px: number, cache: SpacingCache): ResolvedValue<number> {
+  const absPx = Math.abs(px);
+
+  let bestToken: string | null = null;
+  let bestValue: string | null = null;
+  let bestDist = Infinity;
+  let bestThreshold = 0;
+
+  for (const [tokenPx, { token, value }] of cache) {
+    const dist = Math.abs(absPx - tokenPx);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestToken = token;
+      bestValue = value;
+      bestThreshold = Math.min(tokenPx * 0.15, 8);
+    }
+  }
+
+  if (bestDist === 0) {
+    return { raw: px, resolved: bestToken, resolvedValue: bestValue, confidence: 1.0, type: "exact" };
+  }
+
+  if (bestThreshold > 0 && bestDist <= bestThreshold) {
+    // Linear interpolation: 0.95 at distance 0 → 0.75 at threshold boundary.
+    // Note: spec table shows non-linear tiers but spec text says "scales linearly" —
+    // true linear is correct and matches the endpoints.
+    const ratio = bestDist / bestThreshold;
+    const confidence = 0.95 - ratio * 0.2;
+    return { raw: px, resolved: bestToken, resolvedValue: bestValue, confidence, type: "snapped" };
+  }
+
+  return { raw: px, resolved: null, resolvedValue: null, confidence: 0, type: "arbitrary" };
+}
