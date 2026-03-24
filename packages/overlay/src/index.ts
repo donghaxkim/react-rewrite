@@ -268,7 +268,10 @@ function init(): void {
   let generating = false;
   let cooldownUntil = 0; // (#8) Error cooldown timestamp
   setOnGenerate(() => {
-    if (generating) return;
+    if (generating) {
+      showToast("Generation in progress");
+      return;
+    }
     // (#8) Cooldown after errors
     const now = Date.now();
     if (now < cooldownUntil) {
@@ -282,6 +285,7 @@ function init(): void {
       return;
     }
     generating = true;
+    updateGenerateButton(false);
     showToast("Generating...");
     send({ type: "generate", annotations: data });
   });
@@ -293,6 +297,7 @@ function init(): void {
     }
     if (msg.type === "generateComplete") {
       generating = false;
+      updateGenerateButton(hasChanges());
       if (msg.success) {
         const summary = msg.changes
           .map((c) => c.description || c.filePath)
