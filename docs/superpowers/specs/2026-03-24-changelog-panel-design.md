@@ -206,8 +206,10 @@ Call `initChangelog()` during init, `destroyChangelog()` during close.
 
 ### CLI Changes
 
-**`UndoEntry` gains `id: string` field:**
+**`UndoEntry` gains `id: string` and `afterContent: string` fields:**
 Each undo entry gets a `crypto.randomUUID()` at push time. The existing LIFO undo stack is preserved; the ID is an additional handle for targeted revert.
+
+**`afterContent` capture requirement:** The existing undo stack only stores `beforeContent` (the file snapshot before the write). Conflict detection requires `afterContent` — the file content *after* the write was applied. Every file write path must capture both snapshots: `beforeContent` (read before write, already exists) and `afterContent` (read after write, or use the content that was written). This applies to all write paths: property changes (`updateProperty`/`updateProperties`), text edits (`updateText`), and generate applies. This is new per-entry overhead (~2x string storage) but necessary for reliable out-of-order revert.
 
 **`updatePropertyComplete` response** — add `undoId: string` field (the ID of the undo entry just pushed).
 **`updateTextComplete` response** — add `undoId: string` field.
