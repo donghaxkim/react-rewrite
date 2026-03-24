@@ -227,3 +227,131 @@ export function resolveColorChange(
 
   return resolveColor(hex, cache);
 }
+
+// ---------------------------------------------------------------------------
+// Nearest sibling computation (from raw serialized rects)
+// ---------------------------------------------------------------------------
+
+type SiblingRect = { component: string; rect: { top: number; left: number; width: number; height: number } };
+
+interface NearestSiblings {
+  left?: { component: string; distance: number };
+  right?: { component: string; distance: number };
+  above?: { component: string; distance: number };
+  below?: { component: string; distance: number };
+}
+
+export function computeNearestSiblings(
+  movedRect: { top: number; left: number; width: number; height: number },
+  delta: { dx: number; dy: number },
+  siblings: SiblingRect[] | undefined,
+): NearestSiblings {
+  if (!siblings || siblings.length === 0) return {};
+
+  const finalLeft = movedRect.left + delta.dx;
+  const finalTop = movedRect.top + delta.dy;
+  const finalRight = finalLeft + movedRect.width;
+  const finalBottom = finalTop + movedRect.height;
+
+  const result: NearestSiblings = {};
+
+  for (const sib of siblings) {
+    const sRight = sib.rect.left + sib.rect.width;
+    const sBottom = sib.rect.top + sib.rect.height;
+
+    if (sRight <= finalLeft) {
+      const dist = finalLeft - sRight;
+      if (!result.left || dist < result.left.distance) {
+        result.left = { component: sib.component, distance: dist };
+      }
+    }
+    if (sib.rect.left >= finalRight) {
+      const dist = sib.rect.left - finalRight;
+      if (!result.right || dist < result.right.distance) {
+        result.right = { component: sib.component, distance: dist };
+      }
+    }
+    if (sBottom <= finalTop) {
+      const dist = finalTop - sBottom;
+      if (!result.above || dist < result.above.distance) {
+        result.above = { component: sib.component, distance: dist };
+      }
+    }
+    if (sib.rect.top >= finalBottom) {
+      const dist = sib.rect.top - finalBottom;
+      if (!result.below || dist < result.below.distance) {
+        result.below = { component: sib.component, distance: dist };
+      }
+    }
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Main entry point
+// ---------------------------------------------------------------------------
+
+export interface IntentCache {
+  labCache: LabCache;
+  spacingCache: SpacingCache;
+  colorsForward: Record<string, string>;
+}
+
+export function buildIntentCache(tokens: TailwindTokenMap): IntentCache {
+  return {
+    labCache: buildLabCache(tokens.colors),
+    spacingCache: buildSpacingCache(tokens.spacing),
+    colorsForward: tokens.colors,
+  };
+}
+
+export function resolveIntent(
+  annotations: SerializedAnnotations,
+  tokens: TailwindTokenMap,
+  cache?: IntentCache,
+): ResolvedAnnotations {
+  const { labCache, spacingCache, colorsForward } = cache ?? buildIntentCache(tokens);
+
+  const moves = annotations.moves.map((move) => ({
+    component: move.component,
+    file: move.file,
+    line: move.line,
+    originalRect: move.originalRect,
+    delta: move.delta,
+    resolvedDx: move.delta.dx !== 0 ? resolveSpacing(move.delta.dx, spacingCache) : null,
+    resolvedDy: move.delta.dy !== 0 ? resolveSpacing(move.delta.dy, spacingCache) : null,
+    nearestSiblings: computeNearestSiblings(
+      move.originalRect,
+      move.delta,
+      move.siblingRects,
+    ),
+  }));
+
+  const colorChanges = annotations.colorChanges.map((cc) => {
+    let resolvedTo: ResolvedValue<string>;
+
+    if (hasAlpha(cc.to)) {
+      resolvedTo = { raw: cc.to, resolved: null, resolvedValue: null, confidence: 0, type: "arbitrary" as const };
+    } else {
+      resolvedTo = resolveColorChange(cc.to, cc.pickedToken, colorsForward, labCache);
+    }
+
+    return {
+      component: cc.component,
+      file: cc.file,
+      line: cc.line,
+      property: cc.property,
+      from: cc.from,
+      to: cc.to,
+      resolvedTo,
+      pickedToken: cc.pickedToken,
+    };
+  });
+
+  return {
+    moves,
+    annotations: annotations.annotations,
+    colorChanges,
+  };
+}

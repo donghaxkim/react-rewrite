@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { hexToRgb, rgbToLab, deltaE, buildLabCache, resolveColor, buildSpacingCache, resolveSpacing, hasAlpha, resolveColorChange } from "../resolve-intent.js";
+import { hexToRgb, rgbToLab, deltaE, buildLabCache, resolveColor, buildSpacingCache, resolveSpacing, hasAlpha, resolveColorChange, resolveIntent, computeNearestSiblings } from "../resolve-intent.js";
+import type { SerializedAnnotations, TailwindTokenMap } from "@frameup/shared";
 
 describe("hexToRgb", () => {
   it("converts black", () => {
@@ -170,5 +171,105 @@ describe("resolveColorChange — pickedToken", () => {
     const result = resolveColorChange("#3a82f6", undefined, palette, cache);
     expect(result.resolved).toBe("blue-500");
     expect(result.type).toBe("snapped");
+  });
+});
+
+describe("computeNearestSiblings", () => {
+  it("finds nearest sibling in each direction", () => {
+    const movedRect = { top: 100, left: 100, width: 50, height: 50 };
+    const delta = { dx: 0, dy: 0 };
+    const siblings = [
+      { component: "Left", rect: { top: 100, left: 20, width: 30, height: 50 } },
+      { component: "Right", rect: { top: 100, left: 200, width: 50, height: 50 } },
+      { component: "Above", rect: { top: 20, left: 100, width: 50, height: 30 } },
+      { component: "Below", rect: { top: 200, left: 100, width: 50, height: 50 } },
+    ];
+    const result = computeNearestSiblings(movedRect, delta, siblings);
+    expect(result.left?.component).toBe("Left");
+    expect(result.right?.component).toBe("Right");
+    expect(result.above?.component).toBe("Above");
+    expect(result.below?.component).toBe("Below");
+  });
+
+  it("accounts for delta in final position", () => {
+    const movedRect = { top: 100, left: 100, width: 50, height: 50 };
+    const delta = { dx: 100, dy: 0 };
+    const siblings = [
+      { component: "Neighbor", rect: { top: 100, left: 260, width: 50, height: 50 } },
+    ];
+    const result = computeNearestSiblings(movedRect, delta, siblings);
+    expect(result.right?.component).toBe("Neighbor");
+    expect(result.right?.distance).toBe(10);
+  });
+
+  it("returns empty when no siblings", () => {
+    const result = computeNearestSiblings({ top: 0, left: 0, width: 50, height: 50 }, { dx: 0, dy: 0 }, undefined);
+    expect(result).toEqual({});
+  });
+});
+
+describe("resolveIntent", () => {
+  const tokens: TailwindTokenMap = {
+    colors: { "blue-500": "#3b82f6", "red-500": "#ef4444", "white": "#ffffff", "black": "#000000", "transparent": "transparent" },
+    colorsReverse: { "#3b82f6": "blue-500" },
+    spacing: { "0": "0px", "4": "1rem", "8": "2rem" },
+    spacingReverse: { "0px": "0", "1rem": "4", "2rem": "8" },
+    fontSize: {}, fontSizeReverse: {},
+    fontWeight: {}, fontWeightReverse: {},
+    borderRadius: {}, borderRadiusReverse: {},
+    borderWidth: {}, borderWidthReverse: {},
+    opacity: {}, opacityReverse: {},
+    letterSpacing: {}, letterSpacingReverse: {},
+    lineHeight: {}, lineHeightReverse: {},
+  };
+
+  it("resolves color changes to nearest token", () => {
+    const annotations: SerializedAnnotations = {
+      moves: [],
+      annotations: [],
+      colorChanges: [{
+        component: "Button", file: "app.tsx", line: 10,
+        property: "backgroundColor", from: "rgb(255,255,255)", to: "#3a82f6",
+      }],
+    };
+    const result = resolveIntent(annotations, tokens);
+    expect(result.colorChanges[0].resolvedTo.resolved).toBe("blue-500");
+    expect(result.colorChanges[0].from).toBe("rgb(255,255,255)");
+  });
+
+  it("resolves spacing for moves", () => {
+    const annotations: SerializedAnnotations = {
+      moves: [{
+        component: "Card", file: "app.tsx", line: 5,
+        originalRect: { top: 0, left: 0, width: 100, height: 50 },
+        delta: { dx: 16, dy: 0 },
+      }],
+      annotations: [],
+      colorChanges: [],
+    };
+    const result = resolveIntent(annotations, tokens);
+    expect(result.moves[0].resolvedDx?.resolved).toBe("4");
+    expect(result.moves[0].resolvedDy).toBeNull();
+  });
+
+  it("passes through empty annotations", () => {
+    const empty: SerializedAnnotations = { moves: [], annotations: [], colorChanges: [] };
+    const result = resolveIntent(empty, tokens);
+    expect(result.moves).toHaveLength(0);
+    expect(result.colorChanges).toHaveLength(0);
+  });
+
+  it("skips resolution for alpha colors", () => {
+    const annotations: SerializedAnnotations = {
+      moves: [],
+      annotations: [],
+      colorChanges: [{
+        component: "Box", file: "app.tsx", line: 1,
+        property: "backgroundColor", from: "rgba(0,0,0,0.5)", to: "rgba(0,0,0,0.8)",
+      }],
+    };
+    const result = resolveIntent(annotations, tokens);
+    expect(result.colorChanges[0].resolvedTo.type).toBe("arbitrary");
+    expect(result.colorChanges[0].resolvedTo.raw).toBe("rgba(0,0,0,0.8)");
   });
 });
