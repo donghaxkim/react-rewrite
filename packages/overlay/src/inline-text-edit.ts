@@ -186,6 +186,8 @@ function handleDblClick(e: MouseEvent): void {
   if (BLOCKED_TAGS.has(target.tagName)) return;
   if (!target.textContent?.trim()) return;
 
+  // Prevent browser's native word selection on double-click
+  e.preventDefault();
   enterEditMode(target);
 }
 
@@ -215,12 +217,14 @@ function enterEditMode(element: HTMLElement): void {
   setInteractionPointerEvents(false);
 
   element.focus();
-  if (!isMultiLine(element)) {
-    const sel = window.getSelection();
-    if (sel) {
-      sel.removeAllRanges();
-      sel.selectAllChildren(element);
-    }
+  // Place cursor at the end of text content
+  const sel = window.getSelection();
+  if (sel) {
+    sel.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false); // collapse to end
+    sel.addRange(range);
   }
 
   element.addEventListener("blur", handleBlur);

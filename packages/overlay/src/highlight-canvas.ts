@@ -333,17 +333,17 @@ function tick(): void {
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     if (activeGuides.verticalLine) {
-      const { x, top, bottom } = activeGuides.verticalLine;
+      const { x } = activeGuides.verticalLine;
       ctx.beginPath();
-      ctx.moveTo(x, top);
-      ctx.lineTo(x, bottom);
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
       ctx.stroke();
     }
     if (activeGuides.horizontalLine) {
-      const { y, left, right } = activeGuides.horizontalLine;
+      const { y } = activeGuides.horizontalLine;
       ctx.beginPath();
-      ctx.moveTo(left, y);
-      ctx.lineTo(right, y);
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
     ctx.restore();

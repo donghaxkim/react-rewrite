@@ -5,11 +5,13 @@ import { addAnnotation, viewportToPage, type ColorOverrideRuntime } from "../can
 import { addColorBadge } from "../annotation-layer.js";
 import { resolveComponentAtPoint } from "./resolve-helper.js";
 import { openColorPicker, closeColorPicker } from "../color-picker.js";
+import { getProjectColors } from "../properties/tailwind-resolver.js";
 
 let targetEl: HTMLElement | null = null;
 let targetComp: Awaited<ReturnType<typeof resolveComponentAtPoint>> = null;
 let selectedProperty: "backgroundColor" | "color" = "backgroundColor";
 let originalValues: { bg: string; color: string } = { bg: "", color: "" };
+let currentPickedToken: string | undefined;
 
 export const colorHandler: ToolEventHandler = {
   async onMouseDown(e: MouseEvent) {
@@ -37,10 +39,14 @@ export const colorHandler: ToolEventHandler = {
       initialColor,
       position: { x: e.clientX + 10, y: e.clientY + 10 },
       showPropertyToggle: true,
+      projectColors: getProjectColors(),
       onColorChange(hex) {
         if (targetEl) {
           (targetEl.style as any)[selectedProperty] = hex;
         }
+      },
+      onPickedToken(token) {
+        currentPickedToken = token;
       },
       onPropertyChange(prop) {
         selectedProperty = prop;
@@ -64,10 +70,12 @@ export const colorHandler: ToolEventHandler = {
             property: selectedProperty,
             fromColor,
             toColor,
+            pickedToken: currentPickedToken,
           } as ColorOverrideRuntime);
         }
         targetEl = null;
         targetComp = null;
+        currentPickedToken = undefined;
       },
     });
   },
@@ -86,4 +94,5 @@ export function cleanupColorTool(): void {
   setInteractionPointerEvents(true);
   targetEl = null;
   targetComp = null;
+  currentPickedToken = undefined;
 }

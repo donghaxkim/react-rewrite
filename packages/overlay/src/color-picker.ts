@@ -7,7 +7,9 @@ type ColorPickerOptions = {
   initialColor: string;
   position: { x: number; y: number };
   showPropertyToggle: boolean;
+  projectColors?: Array<{ token: string; hex: string }>;
   onColorChange: (color: string) => void;
+  onPickedToken?: (token: string | undefined) => void;
   onPropertyChange?: (property: "backgroundColor" | "color") => void;
   onClose: () => void;
 };
@@ -225,10 +227,52 @@ export function openColorPicker(opts: ColorPickerOptions): void {
   }
   container.appendChild(swatchRow);
 
+  // --- Project color swatches ---
+  if (opts.projectColors && opts.projectColors.length > 0) {
+    const projectLabel = document.createElement("div");
+    projectLabel.textContent = "Project";
+    projectLabel.style.cssText = `
+      font-size: 10px;
+      color: ${COLORS.textSecondary};
+      font-family: ${FONT_FAMILY};
+      margin-top: 2px;
+    `;
+    container.appendChild(projectLabel);
+
+    const projectRow = document.createElement("div");
+    projectRow.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;max-height:48px;overflow-y:auto;";
+
+    for (const { token, hex } of opts.projectColors) {
+      const swatch = document.createElement("button");
+      swatch.title = token;
+      swatch.style.cssText = `
+        width: 12px; height: 12px; border-radius: 50%;
+        background: ${hex};
+        border: 1px solid ${COLORS.border};
+        cursor: pointer; padding: 0;
+        transition: box-shadow ${TRANSITIONS.fast};
+      `;
+      swatch.addEventListener("mouseenter", () => { swatch.style.boxShadow = SHADOWS.sm; });
+      swatch.addEventListener("mouseleave", () => { swatch.style.boxShadow = "none"; });
+      swatch.addEventListener("click", () => {
+        currentHsv = hexToHsv(hex);
+        drawColorArea();
+        drawHueStrip();
+        hexInput.value = hex;
+        emitColor();
+        // Set pickedToken AFTER emitColor (which clears it) — this preserves the token
+        opts.onPickedToken?.(token);
+      });
+      projectRow.appendChild(swatch);
+    }
+    container.appendChild(projectRow);
+  }
+
   function emitColor() {
     const hex = hsvToHex(currentHsv);
     hexInput.value = hex;
     opts.onColorChange(hex);
+    opts.onPickedToken?.(undefined);  // clear — user changed color via area/hue/input, not swatch
   }
 
   shadowRoot.appendChild(container);

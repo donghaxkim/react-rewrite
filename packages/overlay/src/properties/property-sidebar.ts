@@ -243,8 +243,8 @@ export function createSidebar(shadowRoot: ShadowRoot, onClose?: () => void): {
 
   const closeBtn = document.createElement("button");
   closeBtn.className = "prop-sidebar-close";
-  closeBtn.title = "Close panel";
-  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>`;
+  closeBtn.title = "Collapse panel";
+  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="8,2 4,6 8,10"/></svg>`;
 
   header.appendChild(headerInfo);
   header.appendChild(closeBtn);

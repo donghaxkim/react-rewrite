@@ -62,10 +62,12 @@ export function createProxyServer(
       return;
     }
 
-    // Set Accept-Encoding to identity to prevent chunked responses
-    // (needed for Next.js App Router streaming)
+    // For HTML requests: disable caching so we always get the full response
+    // to inject into (prevents 304 Not Modified with empty body)
     if (req.headers.accept?.includes("text/html")) {
       req.headers["accept-encoding"] = "identity";
+      delete req.headers["if-none-match"];
+      delete req.headers["if-modified-since"];
     }
 
     proxy.web(req as any, res as any);
@@ -99,6 +101,7 @@ export function createProxyServer(
       } else {
         body += injectedScript;
       }
+
 
       // Update content-length and remove content-encoding
       const headers = { ...proxyRes.headers };
