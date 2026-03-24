@@ -343,7 +343,7 @@ function buildUserMessageRaw(
   return message;
 }
 
-interface ParsedChange {
+export interface ParsedChange {
   filePath: string;
   replacements: Array<{ search: string; replace: string }>;
   description: string;
@@ -373,7 +373,7 @@ function parseResponse(responseText: string): { mode: "diff"; changes: ParsedCha
 /**
  * Parse SEARCH/REPLACE block format.
  */
-function parseDiffResponse(responseText: string): ParsedChange[] {
+export function parseDiffResponse(responseText: string): ParsedChange[] {
   const changes: ParsedChange[] = [];
 
   // Split response by FILE: markers to process each file's blocks
@@ -465,7 +465,7 @@ function parseFullFileResponse(responseText: string): ParsedFullFile[] {
  * Validate a diff-based change before applying.
  * Returns null if valid, error string if invalid.
  */
-function validateDiffChange(
+export function validateDiffChange(
   change: ParsedChange,
   originalContent: string | undefined,
   projectRoot: string,
@@ -520,7 +520,7 @@ function validateDiffChange(
 /**
  * Count non-overlapping occurrences of a substring.
  */
-function countOccurrences(text: string, sub: string): number {
+export function countOccurrences(text: string, sub: string): number {
   let count = 0;
   let pos = 0;
   while ((pos = text.indexOf(sub, pos)) !== -1) {
@@ -533,7 +533,7 @@ function countOccurrences(text: string, sub: string): number {
 /**
  * Apply search/replace blocks to original content sequentially.
  */
-function applyReplacements(original: string, replacements: Array<{ search: string; replace: string }>): string {
+export function applyReplacements(original: string, replacements: Array<{ search: string; replace: string }>): string {
   let result = original;
   for (const { search, replace } of replacements) {
     result = result.replace(search, replace);
