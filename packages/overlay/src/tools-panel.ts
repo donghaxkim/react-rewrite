@@ -346,9 +346,7 @@ export function initToolsPanel(): void {
   panelEl.className = "tools-panel";
 
   const groups = [
-    ["pointer", "grab"],
-    ["move"],
-    ["draw", "text"],
+    ["select", "text"],
   ];
 
   for (let gi = 0; gi < groups.length; gi++) {
@@ -360,7 +358,7 @@ export function initToolsPanel(): void {
     for (const toolType of groups[gi]) {
       const def = TOOL_DEFS.find(d => d.type === toolType)!;
       const btn = document.createElement("button");
-      btn.className = `tool-btn${def.type === "pointer" ? " active" : ""}`;
+      btn.className = `tool-btn${def.type === "select" ? " active" : ""}`;
       btn.innerHTML = `${def.icon}<span class="tooltip">${def.label}<span class="shortcut-badge">${MOD_KEY}${def.shortcut}</span></span>`;
       btn.addEventListener("click", () => setActiveTool(def.type));
 

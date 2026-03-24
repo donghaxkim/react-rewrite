@@ -199,15 +199,6 @@ export interface ComponentRef {
 
 export type ToolType = "select" | "text";
 
-export interface DrawAnnotation {
-  type: "draw";
-  id: string;
-  points: Array<{ x: number; y: number }>;
-  color: string;
-  strokeWidth: number;
-  targetComponent: ComponentRef | null;
-}
-
 export interface TextAnnotation {
   type: "text";
   id: string;
@@ -238,7 +229,7 @@ export interface TextEditAnnotation {
   newText: string;
 }
 
-export type Annotation = DrawAnnotation | TextAnnotation | ColorOverride | TextEditAnnotation;
+export type Annotation = TextAnnotation | ColorOverride | TextEditAnnotation;
 
 // Note: CanvasUndoAction.colorChange omits `element: HTMLElement` from the spec
 // because shared types must be serializable. The overlay package defines
@@ -270,18 +261,14 @@ export interface SerializedAnnotations {
     siblingRects?: Array<{ component: string; rect: { top: number; left: number; width: number; height: number } }>;
   }>;
   annotations: Array<{
-    type: "draw" | "text";
-    startComponent?: string;
-    startFile?: string;
-    startLine?: number;
+    type: "text";
     targetComponent?: string;
     targetFile?: string;
     targetLine?: number;
-    points?: Array<{ x: number; y: number }>;
-    color?: string;
-    strokeWidth?: number;
     content?: string;
     position?: { x: number; y: number };
+    fontSize?: number;
+    color?: string;
   }>;
   colorChanges: Array<{
     component: string;

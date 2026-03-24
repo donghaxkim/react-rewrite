@@ -43,7 +43,6 @@ function getReferencedFiles(annotations: SerializedAnnotations): string[] {
     if (move.file) files.add(move.file);
   }
   for (const ann of annotations.annotations) {
-    if (ann.startFile) files.add(ann.startFile);
     if (ann.targetFile) files.add(ann.targetFile);
   }
   for (const cc of annotations.colorChanges) {
@@ -204,29 +203,14 @@ function buildUserMessage(
     message += `\n`;
   }
 
-  // Draw/text annotations — unchanged from raw version
-  const drawAnns = annotations.annotations.filter(a => a.type === "draw");
-  const textAnns = annotations.annotations.filter(a => a.type === "text");
-
-  if (textAnns.length > 0) {
+  // Text annotations
+  if (annotations.annotations.length > 0) {
     message += `### Text Annotations (User Instructions)\n`;
-    for (const ann of textAnns) {
+    for (const ann of annotations.annotations) {
       const target = ann.targetComponent
         ? `near **${ann.targetComponent}** (${ann.targetFile}:${ann.targetLine})`
         : `at position (${Math.round(ann.position!.x)}, ${Math.round(ann.position!.y)})`;
       message += `- "${ann.content}" — placed ${target}\n`;
-    }
-    message += `\n`;
-  }
-
-  if (drawAnns.length > 0) {
-    message += `### Drawing Annotations\n`;
-    for (const ann of drawAnns) {
-      const target = ann.startComponent
-        ? `near **${ann.startComponent}** (${ann.startFile}:${ann.startLine})`
-        : "on the page";
-      const points = ann.points?.length ?? 0;
-      message += `- Drawing with ${points} points ${target} (color: ${ann.color})\n`;
     }
     message += `\n`;
   }
@@ -304,29 +288,14 @@ function buildUserMessageRaw(
     message += `\n`;
   }
 
-  // Draw/text annotations
-  const drawAnns = annotations.annotations.filter(a => a.type === "draw");
-  const textAnns = annotations.annotations.filter(a => a.type === "text");
-
-  if (textAnns.length > 0) {
+  // Text annotations
+  if (annotations.annotations.length > 0) {
     message += `### Text Annotations (User Instructions)\n`;
-    for (const ann of textAnns) {
+    for (const ann of annotations.annotations) {
       const target = ann.targetComponent
         ? `near **${ann.targetComponent}** (${ann.targetFile}:${ann.targetLine})`
         : `at position (${Math.round(ann.position!.x)}, ${Math.round(ann.position!.y)})`;
       message += `- "${ann.content}" — placed ${target}\n`;
-    }
-    message += `\n`;
-  }
-
-  if (drawAnns.length > 0) {
-    message += `### Drawing Annotations\n`;
-    for (const ann of drawAnns) {
-      const target = ann.startComponent
-        ? `near **${ann.startComponent}** (${ann.startFile}:${ann.startLine})`
-        : "on the page";
-      const points = ann.points?.length ?? 0;
-      message += `- Drawing with ${points} points ${target} (color: ${ann.color})\n`;
     }
     message += `\n`;
   }

@@ -1,6 +1,6 @@
 // packages/overlay/src/canvas-state.ts
 import type {
-  ToolType, Annotation, DrawAnnotation, TextAnnotation, ColorOverride,
+  ToolType, Annotation, TextAnnotation, ColorOverride,
   ComponentRef, CanvasUndoAction, SerializedAnnotations,
   TextEditAnnotation, ElementIdentity,
 } from "@frameup/shared";
