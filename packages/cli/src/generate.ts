@@ -136,6 +136,7 @@ For each file you modify, respond with one or more SEARCH/REPLACE blocks:
 FILE: path/to/file.tsx
 \`\`\`
 \`\`\`
+LINES: 42-48
 <<<<<<< SEARCH
 exact lines to find in the original file
 =======
@@ -148,6 +149,7 @@ Brief description of what was changed.
 \`\`\`
 
 Rules for SEARCH/REPLACE blocks:
+- Every SEARCH/REPLACE block MUST start with a LINES: start-end directive indicating the target line range in the original file
 - SEARCH content must match the original file EXACTLY (including whitespace and indentation)
 - You can have multiple SEARCH/REPLACE blocks per file
 - Each block should be the minimal change needed
