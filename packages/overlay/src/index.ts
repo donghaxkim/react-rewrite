@@ -1,6 +1,6 @@
 // packages/overlay/src/index.ts
 import { connect, disconnect, send, onMessage } from "./bridge.js";
-import { mountToolbar, destroyToolbar, setOnEyeToggle, setOnGenerate, setOnCanvasUndo, updateEyeButton, updateGenerateButton, showToast, getShadowRoot } from "./toolbar.js";
+import { mountToolbar, destroyToolbar, setOnGenerate, setOnCanvasUndo, updateGenerateButton, showToast, getShadowRoot } from "./toolbar.js";
 import { initSelection, deactivateSelection, clearSelection, setEnabled } from "./selection.js";
 import { initHighlightCanvas, destroyHighlightCanvas } from "./highlight-canvas.js";
 import { initDrag, deactivateDrag } from "./drag.js";
@@ -19,7 +19,7 @@ import { showOnboardingHint, dismissOnboarding } from "./onboarding.js";
 import {
   onToolChange, onStateChange, getActiveTool, setActiveTool,
   canvasUndo, canUndo, resetCanvas, hasChanges, serializeAnnotations,
-  getOriginalsHidden, setOriginalsHidden, onAnnotationRemoved,
+  onAnnotationRemoved,
   getMoves, removeMove,
 } from "./canvas-state.js";
 import { initPropertyController, destroyPropertyController } from "./properties/property-controller.js";
@@ -259,17 +259,6 @@ function init(): void {
     if (description) showToast(`Undo: ${description}`);
   });
 
-  // Eye toggle — only works when moves exist
-  setOnEyeToggle(() => {
-    if (!hasChanges()) {
-      showToast("No moved components to toggle");
-      return;
-    }
-    const next = !getOriginalsHidden();
-    setOriginalsHidden(next);
-    updateEyeButton(next);
-  });
-
   // Generate button — sends annotations to CLI → Claude API → writes code
   let generating = false;
   let cooldownUntil = 0; // (#8) Error cooldown timestamp
@@ -322,7 +311,7 @@ function init(): void {
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
-        updateEyeButton(true);
+
       } else {
         showToast(`Error: ${msg.error || "Generation failed"}`);
         // (#8) 5 second cooldown after errors to prevent spam

@@ -19,7 +19,7 @@ const MOD_KEY = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+";
 const MOD_LABEL = navigator.platform.includes("Mac") ? "Cmd" : "Ctrl";
 
 const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: string }> = [
-  { type: "select", icon: ICONS.pointer, label: "Select", shortcut: "V" },
+  { type: "select", icon: ICONS.pointer, label: "Select", shortcut: "S" },
   { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
 ];
 
@@ -427,13 +427,13 @@ function handleToolShortcut(e: KeyboardEvent): void {
   if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
   if (isTextEditing()) return;
 
-  // All tool shortcuts require Ctrl (Win/Linux) or Cmd (Mac)
-  if (!e.ctrlKey && !e.metaKey) return;
+  // Modifier keys → ignore (let browser handle Cmd+T, Ctrl+V, etc.)
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
 
   const key = e.key.toUpperCase();
 
-  // Toggle shortcuts overlay with Ctrl/Cmd + /
-  if (e.key === "/" || e.key === "?") {
+  // Toggle shortcuts overlay with ?
+  if (e.key === "?") {
     toggleShortcutsOverlay();
     e.preventDefault();
     return;
@@ -481,15 +481,14 @@ function openShortcutsOverlay(): void {
       label: "Tools",
       items: TOOL_DEFS.map(d => ({
         action: d.label,
-        keys: [MOD_LABEL, d.shortcut],
+        keys: [d.shortcut],
       })),
     },
     {
       label: "Actions",
       items: [
         { action: "Undo", keys: [MOD_LABEL, "Z"] },
-        { action: "Toggle Originals", keys: [MOD_LABEL, "."] },
-        { action: "Keyboard Shortcuts", keys: [MOD_LABEL, "/"] },
+        { action: "Keyboard Shortcuts", keys: ["?"] },
         { action: "Cancel / Deselect", keys: ["Esc"] },
       ],
     },
