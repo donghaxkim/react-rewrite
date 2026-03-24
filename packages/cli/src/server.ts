@@ -64,8 +64,11 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
       switch (msg.type) {
         case "reorder": {
           if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
-            send(ws, { type: "reorderComplete", success: false, error: "File path is outside the project root" });
+            const error = msg.filePath.trim()
+              ? "File path is outside the project root"
+              : "File path could not be resolved for this element";
+            console.warn(`[FrameUp] Rejected reorder path: ${msg.filePath}`);
+            send(ws, { type: "reorderComplete", success: false, error });
             break;
           }
           const resolvedPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
@@ -114,8 +117,11 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "updateProperty": {
           if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
-            send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
+            const error = msg.filePath.trim()
+              ? "File path is outside the project root"
+              : "File path could not be resolved for this element";
+            console.warn(`[FrameUp] Rejected property update path: ${msg.filePath}`);
+            send(ws, { type: "updatePropertyComplete", success: false, error });
             break;
           }
           const resolvedPropPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
@@ -147,8 +153,11 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "updateProperties": {
           if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
-            send(ws, { type: "updatePropertyComplete", success: false, error: "File path is outside the project root" });
+            const error = msg.filePath.trim()
+              ? "File path is outside the project root"
+              : "File path could not be resolved for this element";
+            console.warn(`[FrameUp] Rejected property update path: ${msg.filePath}`);
+            send(ws, { type: "updatePropertyComplete", success: false, error });
             break;
           }
           const resolvedPropsPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
@@ -183,8 +192,11 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
 
         case "updateText": {
           if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
-            send(ws, { type: "updateTextComplete", success: false, error: "File path is outside the project root" });
+            const error = msg.filePath.trim()
+              ? "File path is outside the project root"
+              : "File path could not be resolved for this element";
+            console.warn(`[FrameUp] Rejected text update path: ${msg.filePath}`);
+            send(ws, { type: "updateTextComplete", success: false, error });
             break;
           }
           const resolvedTextPath = resolveProjectFilePath(msg.filePath, projectRoot)!;
@@ -315,7 +327,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "getSiblings":
           // Can run concurrently (read-only)
           if (!isProjectFilePathSafe(msg.filePath, projectRoot)) {
-            console.warn(`[FrameUp] Blocked path traversal attempt: ${msg.filePath}`);
+            console.warn(`[FrameUp] Rejected siblings path: ${msg.filePath}`);
             send(ws, { type: "siblingsList", siblings: [] });
             break;
           }

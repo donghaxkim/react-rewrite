@@ -191,6 +191,14 @@ export function getMoveForElement(el: HTMLElement): MoveEntry | undefined {
   return undefined;
 }
 
+export function getMoveContainingElement(el: HTMLElement): MoveEntry | undefined {
+  for (const entry of moves.values()) {
+    if (entry.element === el) return entry;
+    if (entry.element.contains(el) || el.contains(entry.element)) return entry;
+  }
+  return undefined;
+}
+
 // --- Undo ---
 
 export function canvasUndo(): string | null {

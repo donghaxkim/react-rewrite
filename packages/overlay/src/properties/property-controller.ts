@@ -7,6 +7,7 @@ import { getTokenMap, resolveTokenForValue } from "./tailwind-resolver.js";
 import type { MergedTokenMap } from "./tailwind-resolver.js";
 import { send, onCommitResult, onMessage } from "../bridge.js";
 import { addChangeEntry } from "../changelog.js";
+import { showToast } from "../toolbar.js";
 import type { PropertyControl } from "./controls/types.js";
 import { pushUndoAction, type PropertyChangeRuntime } from "../canvas-state.js";
 import { dismissOnboarding } from "../onboarding.js";
@@ -540,6 +541,11 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
 
   // Show sidebar
   sidebar.show(info.componentName, info.filePath, info.lineNumber, container);
+  if (!info.filePath) {
+    sidebar.showWarning("Source file couldn't be resolved for this element", "Dismiss", () => sidebar.clearWarning());
+  } else {
+    sidebar.clearWarning();
+  }
 }
 
 /**
@@ -612,6 +618,15 @@ export function commit(): void {
   if (!state.componentInfo) return;
 
   const filePath = state.componentInfo.filePath;
+  if (!filePath) {
+    state.pendingBatch.clear();
+    if (sidebar) {
+      sidebar.hideSaving();
+      sidebar.showWarning("This element can be inspected, but its source file couldn't be resolved", "Dismiss", () => sidebar.clearWarning());
+    }
+    showToast("Can't save changes for this element");
+    return;
+  }
   const lineNumber = state.componentInfo.lineNumber;
   const columnNumber = state.componentInfo.columnNumber - 1; // Convert 1-indexed to 0-indexed
 

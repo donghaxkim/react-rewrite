@@ -24,9 +24,9 @@ import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMultiSelection, isMultiSelectActive, getHandleAtPoint, getSelectionGeometry, type CornerHandle } from "./highlight-canvas.js";
 import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
-import { isPanningActive } from "./interaction.js";
+import { getPageElementAtPoint, isPanningActive } from "./interaction.js";
 import { tryStartMove, updateMovePosition, endMove } from "./tools/move.js";
-import { hasMoveForElement } from "./canvas-state.js";
+import { getMoveContainingElement, hasMoveForElement } from "./canvas-state.js";
 import { isTextEditing } from "./inline-text-edit.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
@@ -166,6 +166,13 @@ function buildFallbackSelection(el: HTMLElement): ResolvedComponent {
     columnNumber: 0,
     stack: [],
   };
+}
+
+function getCanonicalSelectableElement(clientX: number, clientY: number): HTMLElement | null {
+  const pageEl = getPageElementAtPoint(clientX, clientY);
+  if (!pageEl) return null;
+  const moveEntry = getMoveContainingElement(pageEl);
+  return moveEntry?.element ?? pageEl;
 }
 
 
@@ -308,8 +315,7 @@ function handleMouseDown(e: MouseEvent): void {
   if (e.metaKey || e.ctrlKey) return;
 
   // Ignore clicks on the overlay's own UI (sidebar, toolbar, etc.)
-  const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
-  if (el?.closest("#frameup-root")) return;
+  const el = getCanonicalSelectableElement(e.clientX, e.clientY);
 
   // Check if clicking on a resize corner handle (works for both single and multi-select)
   const hasSelection = currentSelection || multiSelected.size > 0;
@@ -508,7 +514,7 @@ function handleMouseMove(e: MouseEvent): void {
       }
     }
 
-    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement;
+    const el = getCanonicalSelectableElement(e.clientX, e.clientY);
     if (!el || !isValidElement(el)) {
       setHoverTarget(null);
       return;

@@ -3,7 +3,7 @@ import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bipp
 import type { ComponentInfo, SiblingInfo } from "@frameup/shared";
 import { send, onMessage } from "./bridge.js";
 import { clearSelection, setDragCallbacks } from "./selection.js";
-import { getShadowRoot } from "./toolbar.js";
+import { getShadowRoot, showToast } from "./toolbar.js";
 
 // Drag state — preview is created immediately, siblings arrive async
 let preview: HTMLDivElement | null = null;
@@ -106,7 +106,11 @@ function handleDragStart(e: MouseEvent, el: HTMLElement, selection: ComponentInf
 
   // Request siblings asynchronously (drop indicators appear when ready)
   const parentStack = selection.stack[1];
-  if (!parentStack) return;
+  if (!parentStack?.filePath) {
+    showToast("Can't reorder this element");
+    cleanupDrag();
+    return;
+  }
 
   send({
     type: "getSiblings",
@@ -217,6 +221,12 @@ function handleDragMove(e: MouseEvent): void {
 
 function handleDragEnd(e: MouseEvent): void {
   if (!isDragging || !dropTarget || !dragSelection) {
+    cleanupDrag();
+    return;
+  }
+
+  if (!dragSelection.filePath) {
+    showToast("Can't reorder this element");
     cleanupDrag();
     return;
   }
