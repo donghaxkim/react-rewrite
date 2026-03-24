@@ -345,9 +345,15 @@ function buildUserMessageRaw(
   return message;
 }
 
+export interface Replacement {
+  search: string;
+  replace: string;
+  lines?: { start: number; end: number };
+}
+
 export interface ParsedChange {
   filePath: string;
-  replacements: Array<{ search: string; replace: string }>;
+  replacements: Replacement[];
   description: string;
 }
 
@@ -378,7 +384,6 @@ function parseResponse(responseText: string): { mode: "diff"; changes: ParsedCha
 export function parseDiffResponse(responseText: string): ParsedChange[] {
   const changes: ParsedChange[] = [];
 
-  // Split response by FILE: markers to process each file's blocks
   const fileSections = responseText.split(/(?=FILE:\s*)/);
 
   for (const section of fileSections) {
@@ -388,28 +393,48 @@ export function parseDiffResponse(responseText: string): ParsedChange[] {
     const filePath = fileMatch[1].trim();
     if (filePath.startsWith("DESCRIPTION")) continue;
 
-    // Find all SEARCH/REPLACE blocks in this section
-    const blockRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
-    const replacements: Array<{ search: string; replace: string }> = [];
-    let blockMatch;
+    // Primary regex: with LINES directive
+    const linesBlockRegex = /LINES:\s*(\d+)-(\d+)\n<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
+    // Fallback regex: without LINES directive
+    const plainBlockRegex = /<<<<<<< SEARCH\n([\s\S]*?)\n=======\n([\s\S]*?)\n>>>>>>> REPLACE/g;
 
-    while ((blockMatch = blockRegex.exec(section)) !== null) {
+    const replacements: Replacement[] = [];
+
+    // First pass: extract blocks with LINES
+    const linesMatched = new Map<number, number>(); // position → match length
+    let blockMatch;
+    while ((blockMatch = linesBlockRegex.exec(section)) !== null) {
+      linesMatched.set(blockMatch.index, blockMatch[0].length);
+      replacements.push({
+        search: blockMatch[3],
+        replace: blockMatch[4],
+        lines: { start: parseInt(blockMatch[1], 10), end: parseInt(blockMatch[2], 10) },
+      });
+    }
+
+    // Second pass: pick up any blocks without LINES (fallback)
+    while ((blockMatch = plainBlockRegex.exec(section)) !== null) {
+      const searchStart = blockMatch.index;
+      const alreadyCaptured = Array.from(linesMatched).some(([pos, len]) => {
+        return searchStart >= pos && searchStart < pos + len;
+      });
+      if (alreadyCaptured) continue;
+
       replacements.push({
         search: blockMatch[1],
         replace: blockMatch[2],
+        lines: undefined,
       });
     }
 
     if (replacements.length === 0) continue;
 
-    // Check for description
     let description = "";
     const descMatch = section.match(/DESCRIPTION:\s*.+?\n([\s\S]*?)(?=(?:FILE:|$))/);
     if (descMatch) {
       description = descMatch[1].trim();
     }
 
-    // Merge with existing entry for same file, or create new
     const existing = changes.find(c => c.filePath === filePath);
     if (existing) {
       existing.replacements.push(...replacements);
@@ -425,9 +450,9 @@ export function parseDiffResponse(responseText: string): ParsedChange[] {
   while ((descMatch = descRegex.exec(responseText)) !== null) {
     const fp = descMatch[1].trim();
     const desc = descMatch[2].trim();
-    const change = changes.find(c => c.filePath === fp);
-    if (change && !change.description) {
-      change.description = desc;
+    const existing = changes.find(c => c.filePath === fp);
+    if (existing && !existing.description) {
+      existing.description = desc;
     }
   }
 
@@ -535,7 +560,7 @@ export function countOccurrences(text: string, sub: string): number {
 /**
  * Apply search/replace blocks to original content sequentially.
  */
-export function applyReplacements(original: string, replacements: Array<{ search: string; replace: string }>): string {
+export function applyReplacements(original: string, replacements: Replacement[]): string {
   let result = original;
   for (const { search, replace } of replacements) {
     result = result.replace(search, replace);
