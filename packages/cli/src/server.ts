@@ -242,31 +242,53 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "revertChanges": {
           const results: Array<{ undoId: string; success: boolean; error?: string }> = [];
 
-          // Process in reverse order — later changes undone first
-          const entriesToRevert = msg.undoIds
-            .map((id: string) => ({ id, entry: undoStack.find((e) => e.id === id) }))
-            .filter((r): r is { id: string; entry: UndoEntry } => r.entry !== undefined)
-            .sort((a, b) => b.entry.timestamp - a.entry.timestamp);
-
-          for (const { id, entry } of entriesToRevert) {
-            try {
-              const currentContent = fs.readFileSync(entry.filePath, "utf-8");
-              if (currentContent !== entry.afterContent) {
-                results.push({ undoId: id, success: false, error: "File has changed since this edit" });
-                continue;
-              }
-              fs.writeFileSync(entry.filePath, entry.content, "utf-8");
-              entry.reverted = true;
-              results.push({ undoId: id, success: true });
-            } catch (err) {
-              results.push({ undoId: id, success: false, error: err instanceof Error ? err.message : String(err) });
+          // Collect found entries
+          const entriesById = new Map<string, UndoEntry>();
+          for (const id of msg.undoIds) {
+            const entry = undoStack.find((e) => e.id === id);
+            if (entry) {
+              entriesById.set(id, entry);
+            } else {
+              results.push({ undoId: id, success: false, error: "Undo entry not found" });
             }
           }
 
-          // Add undoIds that weren't found
-          for (const id of msg.undoIds) {
-            if (!results.some((r) => r.undoId === id)) {
-              results.push({ undoId: id, success: false, error: "Undo entry not found" });
+          // Group by file path for coalesced revert
+          const byFile = new Map<string, Array<{ id: string; entry: UndoEntry }>>();
+          for (const [id, entry] of entriesById) {
+            const group = byFile.get(entry.filePath) || [];
+            group.push({ id, entry });
+            byFile.set(entry.filePath, group);
+          }
+
+          // Process each file group
+          for (const [filePath, group] of byFile) {
+            // Sort by timestamp descending (most recent first)
+            group.sort((a, b) => b.entry.timestamp - a.entry.timestamp);
+
+            try {
+              const currentContent = fs.readFileSync(filePath, "utf-8");
+              // Check most recent entry's afterContent against current file
+              const mostRecent = group[0].entry;
+              if (currentContent !== mostRecent.afterContent) {
+                for (const { id } of group) {
+                  results.push({ undoId: id, success: false, error: "File has changed since this edit" });
+                }
+                continue;
+              }
+
+              // Write back the earliest entry's beforeContent (restores original state)
+              const earliest = group[group.length - 1].entry;
+              fs.writeFileSync(filePath, earliest.content, "utf-8");
+
+              for (const { id, entry } of group) {
+                entry.reverted = true;
+                results.push({ undoId: id, success: true });
+              }
+            } catch (err) {
+              for (const { id } of group) {
+                results.push({ undoId: id, success: false, error: err instanceof Error ? err.message : String(err) });
+              }
             }
           }
 

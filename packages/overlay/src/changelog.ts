@@ -48,7 +48,7 @@ function findCoalesceTarget(
     ) {
       return entry;
     }
-    break; // Only check the most recent entry
+    // Continue searching — non-property entries shouldn't block coalescing
   }
   return null;
 }
@@ -403,8 +403,8 @@ function renderEntries(): void {
         summaryHtml = summaryText;
       }
 
-      const fileName = entry.elementIdentity
-        ? getBasename(entry.elementIdentity.filePath)
+      const fileName = entry.filePath
+        ? getBasename(entry.filePath)
         : "";
       const time = formatRelativeTime(entry.timestamp);
 
