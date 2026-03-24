@@ -301,11 +301,15 @@ function rerenderSections(): void {
     ? ALL_DESCRIPTORS.filter(d => relevantGroups.has(d.group))
     : ALL_DESCRIPTORS;
 
+  const isFiltered = relevantGroups !== null && descriptorsToRender.length < ALL_DESCRIPTORS.length;
+  const onShowAll = isFiltered ? () => setShowAllGroups(true) : undefined;
+
   const { container, controls: newControls } = renderSections(
     descriptorsToRender,
     state.currentValues,
     preview,
     scheduledCommit,
+    onShowAll,
   );
   controls = newControls;
   sidebar.replaceContent(container);
@@ -476,11 +480,15 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
     : ALL_DESCRIPTORS;
 
   // Render sections
+  const isFiltered = relevantGroups !== null && descriptorsToRender.length < ALL_DESCRIPTORS.length;
+  const onShowAll = isFiltered ? () => setShowAllGroups(true) : undefined;
+
   const { container, controls: newControls } = renderSections(
     descriptorsToRender,
     state.currentValues,
     preview,
     scheduledCommit,
+    onShowAll,
   );
   controls = newControls;
 

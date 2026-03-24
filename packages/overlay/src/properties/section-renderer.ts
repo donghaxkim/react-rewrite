@@ -142,6 +142,18 @@ const SECTION_STYLES = `
     flex: 1;
     min-width: 0;
   }
+  .prop-show-all {
+    padding: 8px 14px;
+    font-family: ${FONT_FAMILY};
+    font-size: 11px;
+    color: ${COLORS.textTertiary};
+    cursor: pointer;
+    text-align: center;
+    user-select: none;
+  }
+  .prop-show-all:hover {
+    color: ${COLORS.accent};
+  }
 `;
 
 // ---------------------------------------------------------------------------
@@ -223,6 +235,7 @@ export function renderSections(
   currentValues: Map<string, string>,
   onPreview: OnPreview,
   onCommit: OnCommit,
+  onShowAll?: () => void,
 ): { container: HTMLElement; controls: PropertyControl[] } {
   const container = document.createElement("div");
   container.className = "prop-sections";
@@ -313,6 +326,14 @@ export function renderSections(
 
     section.appendChild(body);
     container.appendChild(section);
+  }
+
+  if (onShowAll) {
+    const showAllLink = document.createElement("div");
+    showAllLink.className = "prop-show-all";
+    showAllLink.textContent = "Show all properties";
+    showAllLink.addEventListener("click", onShowAll);
+    container.appendChild(showAllLink);
   }
 
   return { container, controls: allControls };
