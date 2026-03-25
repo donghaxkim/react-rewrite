@@ -16,6 +16,9 @@ import {
 import { getSelection, getSelectedElement } from "../selection.js";
 import { computeSnap } from "../snap-guides.js";
 import { setSnapGuides, clearSnapGuides } from "../highlight-canvas.js";
+import { addToPending } from "../pending-changes.js";
+import { computeNthOfType } from "../utils/nth-of-type.js";
+import { hasApiKey } from "../config.js";
 
 let dragEntry: MoveEntry | null = null;
 let dragStartMouse = { x: 0, y: 0 };
@@ -135,6 +138,27 @@ export function endMove(): HTMLElement | null {
       ? { type: "moveRemove", moveId: entry.id }
       : { type: "moveRestore", moveId: entry.id, previousDelta },
   });
+
+  // Path B: API key present → also add to pending store for batched apply
+  if (hasApiKey() && entry.componentRef.filePath) {
+    const el = entry.element;
+    const parentEl = el?.parentElement;
+
+    addToPending({
+      type: "move",
+      componentName: entry.componentRef.componentName,
+      tag: el?.tagName.toLowerCase() || "div",
+      filePath: entry.componentRef.filePath,
+      className: el?.className || "",
+      nthOfType: el ? computeNthOfType(el) : 1,
+      parentTag: parentEl?.tagName.toLowerCase() || "",
+      parentClassName: parentEl?.className || "",
+      lineHint: entry.componentRef.lineNumber,
+      delta: { dx: nextDelta.dx, dy: nextDelta.dy },
+      resolvedDx: null, // TODO: resolved Tailwind class for dx
+      resolvedDy: null, // TODO: resolved Tailwind class for dy
+    });
+  }
 
   const el = entry.element;
   dragEntry = null;
