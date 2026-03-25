@@ -2,6 +2,7 @@
 import type { ApplyChange } from "@frameup/shared";
 import { send, onApplyAllComplete } from "./bridge.js";
 import { showToast } from "./toolbar.js";
+import { addChangeEntry, promoteAllPending, removeAllPending } from "./changelog.js";
 
 type PendingElementKey = string;
 
@@ -29,6 +30,19 @@ export function setOnCountChange(cb: (count: number) => void): void {
   onCountChange = cb;
 }
 
+function formatPendingDescription(change: ApplyChange): string {
+  switch (change.type) {
+    case "property":
+      return change.updates.map((u) => `${u.oldClass || "none"} → ${u.newClass}`).join(", ");
+    case "text":
+      return `"${change.originalText.slice(0, 20)}" → "${change.newText.slice(0, 20)}"`;
+    case "reorder":
+      return `reorder children (${change.fromIndex + 1} → ${change.toIndex + 1})`;
+    case "move":
+      return `move (${Math.round(change.delta.dx)}px, ${Math.round(change.delta.dy)}px)`;
+  }
+}
+
 export function addToPending(change: ApplyChange): void {
   if (!change.filePath) {
     showToast("Cannot track changes — source file not resolved", "warning");
@@ -52,6 +66,23 @@ export function addToPending(change: ApplyChange): void {
   }
 
   onCountChange?.(pending.size);
+
+  // Add changelog entry for the pending change
+  addChangeEntry({
+    type:
+      change.type === "reorder"
+        ? "property"
+        : change.type === "move"
+          ? "move"
+          : change.type === "text"
+            ? "textEdit"
+            : "property",
+    componentName: change.componentName,
+    filePath: change.filePath,
+    summary: formatPendingDescription(change),
+    state: "pending",
+    revertData: { type: "noop" },
+  });
 }
 
 export function pendingCount(): number {
@@ -91,6 +122,7 @@ export function trackOverrides(
  * Discard all pending changes and revert inline CSS previews.
  */
 export function discardAll(): void {
+  removeAllPending();
   for (const [, { element, overrides }] of pendingOverrides) {
     for (const [cssProperty, originalValue] of overrides) {
       (element.style as any)[cssProperty] = originalValue;
@@ -125,6 +157,7 @@ onApplyAllComplete((msg) => {
     applyTimeoutId = null;
   }
   if (msg.success) {
+    promoteAllPending();
     pendingOverrides.clear();
     clearAll();
     showToast(`Applied ${msg.appliedCount} change${msg.appliedCount === 1 ? "" : "s"}`, "success");

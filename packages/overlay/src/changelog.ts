@@ -138,6 +138,28 @@ export function clearChangelog(): void {
   notifyChangelogChange();
 }
 
+export function promoteAllPending(): void {
+  let changed = false;
+  for (const entry of entries.values()) {
+    if (entry.state === "pending") {
+      entry.state = "active";
+      changed = true;
+    }
+  }
+  if (changed) notifyChangelogChange();
+}
+
+export function removeAllPending(): void {
+  let changed = false;
+  for (const [id, entry] of entries) {
+    if (entry.state === "pending") {
+      entries.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) notifyChangelogChange();
+}
+
 // ---------------------------------------------------------------------------
 // UI — DOM refs
 // ---------------------------------------------------------------------------
