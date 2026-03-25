@@ -98,6 +98,21 @@ export function disconnect(): void {
   messageHandlers = [];
 }
 
+/** Request file discovery from CLI. Returns a promise that resolves with filePath or null. */
+export function requestFileDiscovery(componentName: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const unsub = onMessage((msg) => {
+      if (msg.type === "discoverFileResult" && msg.componentName === componentName) {
+        unsub();
+        resolve(msg.filePath);
+      }
+    });
+    send({ type: "discoverFile", componentName });
+    // Timeout after 5 seconds
+    setTimeout(() => { unsub(); resolve(null); }, 5000);
+  });
+}
+
 export function setOnMaxRetries(callback: () => void): void {
   onMaxRetriesExhausted = callback;
 }
