@@ -4,6 +4,8 @@ import type { ComponentInfo, SiblingInfo } from "@frameup/shared";
 import { send, onMessage } from "./bridge.js";
 import { clearSelection, setDragCallbacks } from "./selection.js";
 import { getShadowRoot, showToast } from "./toolbar.js";
+import { addToPending } from "./pending-changes.js";
+import { hasApiKey } from "./config.js";
 
 // Drag state — preview is created immediately, siblings arrive async
 let preview: HTMLDivElement | null = null;
@@ -227,6 +229,44 @@ function handleDragEnd(e: MouseEvent): void {
 
   if (!dragSelection.filePath) {
     showToast("Can't reorder this element");
+    cleanupDrag();
+    return;
+  }
+
+  // Path B: API key present → add to pending store
+  if (hasApiKey()) {
+    const el = dragElement;
+    const parentEl = el?.parentElement;
+    const children = parentEl ? Array.from(parentEl.children) : [];
+    const childrenContext = children.map((child) => ({
+      tag: child.tagName.toLowerCase(),
+      className: (child as HTMLElement).className || "",
+      textContent: (child.textContent || "").slice(0, 30),
+    }));
+
+    // Compute child indices from DOM order
+    const fromIndex = el && parentEl ? Array.from(parentEl.children).indexOf(el) : 0;
+    // For toIndex, use siblingElements map to find the drop target element
+    let toIndex = fromIndex;
+    if (dropTarget && parentEl) {
+      const dropEl = siblingElements.get(dropTarget.lineNumber)?.el;
+      if (dropEl) {
+        const dropIdx = Array.from(parentEl.children).indexOf(dropEl);
+        if (dropIdx >= 0) toIndex = dropIdx;
+      }
+    }
+
+    addToPending({
+      type: "reorder",
+      componentName: dragSelection.componentName,
+      tag: el?.tagName.toLowerCase() || "div",
+      filePath: dragSelection.filePath,
+      parentClassName: parentEl?.className || "",
+      lineHint: dragSelection.lineNumber,
+      childrenContext,
+      fromIndex,
+      toIndex,
+    });
     cleanupDrag();
     return;
   }
