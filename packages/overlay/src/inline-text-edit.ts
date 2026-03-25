@@ -1,6 +1,7 @@
 import type { ServerMessage, ComponentInfo, ElementIdentity, TextEditAnnotation } from "@frameup/shared";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
-import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
+import { getOwnerStack } from "bippy/source";
+import { resolveFrameFilePath } from "./utils/source-resolve.js";
 import { send, onMessage } from "./bridge.js";
 import { COLORS } from "./design-tokens.js";
 import { setInteractionPointerEvents, activateInteraction, getPageElementAtPoint } from "./interaction.js";
@@ -9,6 +10,9 @@ import { addTextEditAnnotation } from "./canvas-state.js";
 import { isInternalName, isValidElement } from "./utils/component-filter.js";
 import { clearSelection, selectElement } from "./selection.js";
 import { addChangeEntry } from "./changelog.js";
+import { addToPending } from "./pending-changes.js";
+import { computeNthOfType } from "./utils/nth-of-type.js";
+import { hasApiKey } from "./config.js";
 
 // --- Helpers ---
 
@@ -151,14 +155,7 @@ async function resolveComponent(el: HTMLElement): Promise<ComponentInfo | null> 
         if (name[0] !== name[0].toUpperCase()) continue;
         if (isInternalName(name)) continue;
 
-        let filePath = "";
-        if (frame.fileName) {
-          const normalized = normalizeFileName(frame.fileName);
-          const isSource = isSourceFile(normalized);
-          if (isSource) {
-            filePath = normalized;
-          }
-        }
+        const filePath = resolveFrameFilePath(frame.fileName);
 
         return {
           tagName: el.tagName.toLowerCase(),
@@ -357,6 +354,44 @@ function commitAndExit(options?: {
   const changed = newText !== originalTextContent;
 
   if (changed && componentInfo) {
+    // Path B: API key present + filePath available → add to pending store
+    if (hasApiKey() && componentInfo.filePath) {
+      const el = editingElement;
+      const parentEl = el?.parentElement;
+
+      addToPending({
+        type: "text",
+        componentName: componentInfo.componentName,
+        tag: componentInfo.tagName,
+        filePath: componentInfo.filePath,
+        className: el?.className || "",
+        nthOfType: el ? computeNthOfType(el) : 1,
+        parentTag: parentEl?.tagName.toLowerCase() || "",
+        parentClassName: parentEl?.className || "",
+        lineHint: componentInfo.lineNumber,
+        originalText: originalTextContent,
+        newText,
+      });
+
+      const elementToSelectB = editingElement;
+      exitEditMode();
+      if (options?.nextSelection && document.contains(options.nextSelection)) {
+        selectElement(options.nextSelection, { skipSidebar: false });
+        return;
+      }
+      if (options?.clearSelection) {
+        clearSelection();
+        return;
+      }
+      if (options?.reselectEditedElement === false) {
+        return;
+      }
+      if (elementToSelectB && document.contains(elementToSelectB)) {
+        selectElement(elementToSelectB, { skipSidebar: false });
+      }
+      return;
+    }
+
     if (componentInfo.filePath) {
       // Path A: AST write — we have source location info
       pendingCommit = {
