@@ -45,12 +45,91 @@ interface ResolvedOp {
   error?: string;
 }
 
+// ── Node resolution helpers ──────────────────────────────────────────────
+
+function getJSXTagName(node: any): string | null {
+  const name = node.openingElement?.name;
+  if (!name) return null;
+  if (name.type === "JSXIdentifier") return name.name;
+  if (name.type === "JSXMemberExpression") {
+    return `${name.object?.name}.${name.property?.name}`;
+  }
+  return null;
+}
+
+/** Extract static classes from a JSX element's className attribute. */
+function getJSXStaticClasses(node: any): string[] {
+  const attrs = node.openingElement?.attributes ?? [];
+  const classNameAttr = attrs.find(
+    (a: any) => a.type === "JSXAttribute" && a.name?.name === "className"
+  );
+  if (!classNameAttr?.value) return [];
+  const val = classNameAttr.value;
+  // Handle both StringLiteral (tsx parser) and Literal (babel parser)
+  if (val.type === "StringLiteral" || val.type === "Literal") {
+    return (val.value ?? "").split(/\s+/).filter(Boolean);
+  }
+  return [];
+}
+
+/** Get the id attribute from a JSX element. */
+function getJSXId(node: any): string | null {
+  const attrs = node.openingElement?.attributes ?? [];
+  const idAttr = attrs.find(
+    (a: any) => a.type === "JSXAttribute" && a.name?.name === "id"
+  );
+  if (!idAttr?.value) return null;
+  const val = idAttr.value;
+  if (val.type === "StringLiteral" || val.type === "Literal") return val.value;
+  return null;
+}
+
+/** Get the key prop from a JSX element. */
+function getJSXKey(node: any): string | null {
+  const attrs = node.openingElement?.attributes ?? [];
+  const keyAttr = attrs.find(
+    (a: any) => a.type === "JSXAttribute" && a.name?.name === "key"
+  );
+  if (!keyAttr?.value) return null;
+  const val = keyAttr.value;
+  if (val.type === "StringLiteral" || val.type === "Literal") return val.value;
+  return null;
+}
+
+/** Check if AST static classes are a subset of the DOM classes provided. */
+function classNameSubsetMatch(astClasses: string[], domClassName: string): boolean {
+  if (astClasses.length === 0) return false;
+  const domClasses = domClassName.split(/\s+/).filter(Boolean);
+  // All AST classes should appear in DOM classes
+  return astClasses.every((c) => domClasses.includes(c));
+}
+
+/**
+ * Compute the nth-of-type index (0-based) for a JSX element among its
+ * same-tag siblings within the same parent.
+ */
+function computeASTNthOfType(astPath: any): number {
+  const parent = astPath.parent?.node;
+  if (!parent?.children) return 0;
+  const tag = getJSXTagName(astPath.node);
+  if (!tag) return 0;
+  let count = 0;
+  for (const child of parent.children) {
+    if (child === astPath.node) return count;
+    if (child.type === "JSXElement" && getJSXTagName(child) === tag) {
+      count++;
+    }
+  }
+  return count;
+}
+
 // ── Node resolution ──────────────────────────────────────────────────────
 
 function resolveNodes(
   j: any,
   root: any,
   ops: Array<{ index: number; op: BatchOperation }>,
+  resolvedPath: string,
 ): ResolvedOp[] {
   const resolved: ResolvedOp[] = [];
 
@@ -66,31 +145,101 @@ function resolveNodes(
       continue;
     }
 
-    // All other ops use line:col resolution
-    const node = findJSXElementAt(j, root, op.line, op.col);
+    // ── Staleness check ──────────────────────────────────────────────
+    if (op.fileMtime != null && op.fileSize != null) {
+      try {
+        const stat = fs.statSync(resolvedPath);
+        const currentMtime = Math.floor(stat.mtimeMs);
+        const currentSize = stat.size;
+        if (currentMtime !== op.fileMtime || currentSize !== op.fileSize) {
+          resolved.push({
+            index,
+            op,
+            node: null,
+            priority: 0,
+            error: `File has been modified since the overlay captured this element (stale). ` +
+              `Expected mtime=${op.fileMtime}/size=${op.fileSize}, got mtime=${currentMtime}/size=${currentSize}`,
+          });
+          continue;
+        }
+      } catch {
+        // stat failed — proceed without staleness check
+      }
+    }
+
+    // ── Step A: Try exact line:col match ─────────────────────────────
+    let node = findJSXElementAt(j, root, op.line, op.col);
+
+    // Cross-validate tag name if we got a hit and hint is available
+    if (node && op.tagName) {
+      const actualTag = getJSXTagName(node.node);
+      if (actualTag && actualTag !== op.tagName) {
+        // Exact position hit wrong tag — clear and fall through
+        node = null;
+      }
+    }
+
+    // ── Step B: Fallback — fuzzy resolution using hints ──────────────
+    if (!node && op.tagName) {
+      const candidates: any[] = [];
+      root.find(j.JSXElement).forEach((p: any) => {
+        if (getJSXTagName(p.node) === op.tagName) {
+          candidates.push(p);
+        }
+      });
+
+      if (candidates.length === 1) {
+        // Only one element with that tag name — use it
+        node = candidates[0];
+      } else if (candidates.length > 1) {
+        // ── Disambiguate ───────────────────────────────────────────
+
+        // B1: Filter by id
+        if (!node && op.id) {
+          const byId = candidates.filter((p: any) => getJSXId(p.node) === op.id);
+          if (byId.length === 1) node = byId[0];
+        }
+
+        // B2: Filter by key
+        if (!node && op.jsxKey) {
+          const byKey = candidates.filter((p: any) => getJSXKey(p.node) === op.jsxKey);
+          if (byKey.length === 1) node = byKey[0];
+        }
+
+        // B3: Filter by className subset match
+        if (!node && op.className) {
+          const byClass = candidates.filter((p: any) => {
+            const astClasses = getJSXStaticClasses(p.node);
+            return classNameSubsetMatch(astClasses, op.className!);
+          });
+          if (byClass.length === 1) {
+            node = byClass[0];
+          } else if (byClass.length > 1 && op.nthOfType != null) {
+            // B4: Among className matches, disambiguate by nthOfType
+            const match = byClass.find((p: any) => computeASTNthOfType(p) === op.nthOfType);
+            if (match) node = match;
+          }
+        }
+
+        // B5: nthOfType without className
+        if (!node && op.nthOfType != null) {
+          const byNth = candidates.filter((p: any) => computeASTNthOfType(p) === op.nthOfType);
+          if (byNth.length === 1) node = byNth[0];
+        }
+      }
+    }
+
     if (!node) {
       resolved.push({
         index,
         op,
         node: null,
         priority: 0,
-        error: `No JSX element found at ${op.line}:${op.col}`,
+        error: `No JSX element found at ${op.line}:${op.col}` +
+          (op.tagName ? ` (tag=${op.tagName})` : "") +
+          (op.className ? ` (className=${op.className})` : ""),
       });
       continue;
-    }
-
-    // Cross-validate component name if provided
-    if (op.componentName) {
-      const nodeName = node.node.openingElement?.name;
-      const actualName =
-        nodeName?.type === "JSXIdentifier" ? nodeName.name :
-        nodeName?.type === "JSXMemberExpression"
-          ? `${nodeName.object?.name}.${nodeName.property?.name}`
-          : null;
-      // Only warn, don't fail — component name might be the wrapper, not the tag
-      if (actualName && actualName !== op.componentName) {
-        // Soft mismatch — proceed but log
-      }
     }
 
     const priority = op.op === "updateClass" || op.op === "updateText" || op.op === "moveSpacing" ? 0 : 1;
@@ -175,12 +324,30 @@ function applyOp(j: any, root: any, rop: ResolvedOp): string | undefined {
     }
 
     case "moveSpacing": {
-      // Convert move intent to a className update
       const prefix = getMovePrefix(op.axis, op.direction, op.layoutContext);
+
+      // Move-scoped: remove both positive and negative variants before applying
+      const openingElement = node.node.openingElement;
+      const attrs = openingElement?.attributes ?? [];
+      const classNameAttr = attrs.find(
+        (a: any) => a.type === "JSXAttribute" && a.name?.name === "className"
+      );
+      if (classNameAttr?.value) {
+        const val = classNameAttr.value;
+        if (val.type === "StringLiteral" || val.type === "Literal") {
+          const classes = val.value.split(/\s+/).filter(Boolean);
+          val.value = classes.filter((c: string) => {
+            if (c.startsWith(`${prefix}-`) || c === prefix) return false;
+            if (c.startsWith(`-${prefix}-`) || c === `-${prefix}`) return false;
+            return true;
+          }).join(" ");
+        }
+      }
+
       const updates: ClassNameUpdate[] = [{
         tailwindPrefix: prefix,
         tailwindToken: op.token,
-        value: "", // token is the tailwind token itself
+        value: "",
       }];
       mutateClassName(j, node, updates);
       return undefined;
@@ -280,7 +447,7 @@ export function executeBatch(
     const { j, root, quoteStyle } = parseSource(source, resolvedPath);
 
     // Phase 1: Resolve all nodes against the ORIGINAL AST
-    const resolved = resolveNodes(j, root, ops);
+    const resolved = resolveNodes(j, root, ops, resolvedPath);
 
     // Phase 2: Coalesce same-node operations
     const coalesced = coalesceOps(resolved);
