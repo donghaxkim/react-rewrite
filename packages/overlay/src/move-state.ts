@@ -24,6 +24,10 @@ export interface MoveEntry {
   existingTransform: string;
   identity: ElementIdentity;
   parentLayout?: ParentLayout;
+  nthOfType?: number;
+  jsxKey?: string;
+  fileMtime?: number;
+  fileSize?: number;
 }
 
 /** Capture the parent layout context for a moved element. */
@@ -112,6 +116,19 @@ const OUT_OF_FLOW = new Set(["absolute", "fixed", "sticky"]);
 
 export function isOutOfFlow(element: HTMLElement): boolean {
   return OUT_OF_FLOW.has(getComputedStyle(element).position);
+}
+
+/** Count same-tag siblings before this element in its parent (0-indexed). */
+export function computeNthOfType(element: HTMLElement): number {
+  const parent = element.parentElement;
+  if (!parent) return 0;
+  const tag = element.tagName;
+  let count = 0;
+  for (const child of Array.from(parent.children)) {
+    if (child === element) break;
+    if (child.tagName === tag) count++;
+  }
+  return count;
 }
 
 // ---------------------------------------------------------------------------

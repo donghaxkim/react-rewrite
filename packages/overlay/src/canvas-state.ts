@@ -444,19 +444,41 @@ export function buildBatchOperations(): BatchOperation[] {
   }
 
   // Moves → moveSpacing
+  // Send full identity for deterministic AST resolution
   for (const entry of moves.values()) {
-    if (!entry.componentRef.filePath) continue;
+    const file = entry.identity.filePath || entry.componentRef.filePath;
+    if (!file) continue;
 
+    const line = entry.identity.lineNumber;
     const col = entry.identity.columnNumber;
     const layout = deriveLayoutContext(entry.parentLayout);
+    const tagName = entry.element.tagName.toLowerCase();
+    const className = entry.element.className || undefined;
+    const parentEl = entry.element.parentElement;
+    const parentTagName = parentEl?.tagName.toLowerCase();
+    const parentClassName = parentEl?.className || undefined;
+    const elId = entry.element.id || undefined;
+
+    const baseIdentity = {
+      componentName: entry.componentRef.componentName,
+      tagName,
+      className,
+      parentTagName,
+      parentClassName,
+      nthOfType: entry.nthOfType,
+      id: elId,
+      jsxKey: entry.jsxKey,
+      fileMtime: entry.fileMtime,
+      fileSize: entry.fileSize,
+    };
 
     if (Math.abs(entry.delta.dx) >= 1) {
       ops.push({
         op: "moveSpacing",
-        file: entry.componentRef.filePath,
-        line: entry.componentRef.lineNumber,
+        file,
+        line,
         col,
-        componentName: entry.componentRef.componentName,
+        ...baseIdentity,
         axis: "x",
         token: snapToSpacingToken(entry.delta.dx),
         direction: entry.delta.dx > 0 ? "positive" : "negative",
@@ -467,10 +489,10 @@ export function buildBatchOperations(): BatchOperation[] {
     if (Math.abs(entry.delta.dy) >= 1) {
       ops.push({
         op: "moveSpacing",
-        file: entry.componentRef.filePath,
-        line: entry.componentRef.lineNumber,
+        file,
+        line,
         col,
-        componentName: entry.componentRef.componentName,
+        ...baseIdentity,
         axis: "y",
         token: snapToSpacingToken(entry.delta.dy),
         direction: entry.delta.dy > 0 ? "positive" : "negative",

@@ -4,7 +4,7 @@
 // No longer a ToolEventHandler; these are standalone functions.
 
 import type { MoveEntry } from "../move-state.js";
-import { applyDragVisual, settleDragVisual, captureParentLayout } from "../move-state.js";
+import { applyDragVisual, settleDragVisual, captureParentLayout, computeNthOfType } from "../move-state.js";
 import { addChangeEntry } from "../changelog.js";
 import {
   addMove,
@@ -17,8 +17,9 @@ import { getSelection, getSelectedElement } from "../selection.js";
 import { computeSnap } from "../snap-guides.js";
 import { setSnapGuides, clearSnapGuides } from "../highlight-canvas.js";
 import { addToPending } from "../pending-changes.js";
-import { computeNthOfType } from "../utils/nth-of-type.js";
+import { requestFileStat } from "../bridge.js";
 import { hasApiKey } from "../config.js";
+import { getFiberFromHostInstance } from "bippy";
 
 let dragEntry: MoveEntry | null = null;
 let dragStartMouse = { x: 0, y: 0 };
@@ -53,6 +54,13 @@ export function tryStartMove(clientX: number, clientY: number, el: HTMLElement):
   const originalCssText = selectedEl.style.cssText;
   const existingTransform = getComputedStyle(selectedEl).transform;
 
+  // Capture fiber key for list item disambiguation
+  const hostFiber = getFiberFromHostInstance(selectedEl);
+  const jsxKey = hostFiber?.key != null ? String(hostFiber.key) : undefined;
+
+  // Compute nth-of-type among same-tag siblings in the DOM
+  const nthOfType = computeNthOfType(selectedEl);
+
   const entry: MoveEntry = {
     id: crypto.randomUUID(),
     componentRef: {
@@ -75,7 +83,15 @@ export function tryStartMove(clientX: number, clientY: number, el: HTMLElement):
       tagName: selectedEl.tagName.toLowerCase(),
     },
     parentLayout: captureParentLayout(selectedEl),
+    nthOfType,
+    jsxKey,
   };
+
+  // Request file stat for staleness detection (async, stored on entry when it resolves)
+  requestFileStat(selection.filePath).then(({ mtime, size }) => {
+    entry.fileMtime = mtime;
+    entry.fileSize = size;
+  });
 
   addMove(entry);
   dragEntry = entry;

@@ -152,3 +152,18 @@ export function manualReconnect(): void {
     connect(savedPort);
   }
 }
+
+/** Request file stat from CLI for staleness detection. */
+export function requestFileStat(filePath: string): Promise<{ mtime: number; size: number }> {
+  return new Promise((resolve) => {
+    const unsub = onMessage((msg) => {
+      if ((msg as any).type === "fileStatResult" && (msg as any).filePath === filePath) {
+        unsub();
+        resolve({ mtime: (msg as any).mtime, size: (msg as any).size });
+      }
+    });
+    send({ type: "fileStat", filePath } as any);
+    // Timeout after 2 seconds
+    setTimeout(() => { unsub(); resolve({ mtime: 0, size: 0 }); }, 2000);
+  });
+}
