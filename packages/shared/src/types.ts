@@ -77,6 +77,15 @@ export type BatchOperation =
       line: number;
       col: number;
       componentName?: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
       updates: Array<{
         tailwindPrefix: string;
         tailwindToken: string | null;
@@ -92,6 +101,15 @@ export type BatchOperation =
       line: number;
       col: number;
       componentName?: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
       originalText: string;
       newText: string;
     }
@@ -107,6 +125,15 @@ export type BatchOperation =
       line: number;
       col: number;
       componentName?: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
       axis: "x" | "y";
       token: string;
       direction: "positive" | "negative";
@@ -174,7 +201,8 @@ export type ClientMessage =
   | {
       type: "commitBatch";
       operations: BatchOperation[];
-    };
+    }
+  | { type: "fileStat"; filePath: string };
 
 export type ServerMessage =
   | { type: "reorderComplete"; success: boolean; error?: string }
@@ -221,6 +249,7 @@ export type ServerMessage =
       error?: string;
       undoIds: string[];
     }
+  | { type: "fileStatResult"; filePath: string; mtime: number; size: number }
   | { type: "config"; hasApiKey: boolean };
 
 export interface ComponentInfo {
