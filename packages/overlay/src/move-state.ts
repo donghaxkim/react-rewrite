@@ -7,6 +7,12 @@ import { SHADOWS } from "./design-tokens.js";
 // Types
 // ---------------------------------------------------------------------------
 
+export interface ParentLayout {
+  display: "flex" | "grid" | "block" | "inline" | string;
+  flexDirection: string;
+  elementPosition: string; // "static" | "relative" | "absolute" | "fixed" | "sticky"
+}
+
 export interface MoveEntry {
   id: string;
   componentRef: ComponentRef;
@@ -17,6 +23,19 @@ export interface MoveEntry {
   originalCssText: string;
   existingTransform: string;
   identity: ElementIdentity;
+  parentLayout?: ParentLayout;
+}
+
+/** Capture the parent layout context for a moved element. */
+export function captureParentLayout(element: HTMLElement): ParentLayout {
+  const parent = element.parentElement;
+  const parentStyle = parent ? getComputedStyle(parent) : null;
+  const elementStyle = getComputedStyle(element);
+  return {
+    display: parentStyle?.display ?? "block",
+    flexDirection: parentStyle?.flexDirection ?? "row",
+    elementPosition: elementStyle.position,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -18,9 +18,10 @@ import { clearVisibilityCache } from "./utils/component-filter.js";
 import { showOnboardingHint, dismissOnboarding } from "./onboarding.js";
 import {
   onToolChange, onStateChange, getActiveTool, setActiveTool,
-  canvasUndo, canUndo, resetCanvas, hasChanges, serializeAnnotations,
+  canvasUndo, canUndo, resetCanvas, hasChanges,
   onAnnotationRemoved,
   getMoves, removeMove,
+  buildBatchOperations, hasTextAnnotations, serializeTextAnnotationsOnly,
 } from "./canvas-state.js";
 import { initPropertyController, destroyPropertyController } from "./properties/property-controller.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
@@ -262,7 +263,8 @@ function init(): void {
     if (description) showToast(`Undo: ${description}`);
   });
 
-  // Generate button — sends annotations to CLI → Claude API → writes code
+  // Confirm button — deterministic batch for moves/colors/text edits,
+  // AI generate only for freeform text annotations
   let generating = false;
   let cooldownUntil = 0; // (#8) Error cooldown timestamp
   setOnGenerate(() => {
@@ -270,25 +272,91 @@ function init(): void {
       showToast("Generation in progress");
       return;
     }
-    // (#8) Cooldown after errors
     const now = Date.now();
     if (now < cooldownUntil) {
       const remaining = Math.ceil((cooldownUntil - now) / 1000);
       showToast(`Please wait ${remaining}s before retrying`);
       return;
     }
-    const data = serializeAnnotations();
-    if (!data.moves.length && !data.annotations.length && !data.colorChanges.length && !data.textEdits.length) {
+    if (!hasChanges()) {
       showToast("Nothing to confirm — make some visual changes first");
       return;
     }
-    generating = true;
-    updateGenerateButton(false);
-    showToast("Generating...");
-    send({ type: "generate", annotations: data });
+
+    // Path 1: Deterministic batch operations (colors, text edits, moves)
+    const batchOps = buildBatchOperations();
+    if (batchOps.length > 0) {
+      generating = true;
+      updateGenerateButton(false);
+      showToast(`Applying ${batchOps.length} change${batchOps.length !== 1 ? "s" : ""}...`);
+      send({ type: "commitBatch", operations: batchOps });
+    }
+
+    // Path 2: AI generate for text annotations (freeform notes)
+    if (hasTextAnnotations()) {
+      const data = serializeTextAnnotationsOnly();
+      generating = true;
+      updateGenerateButton(false);
+      showToast("Generating from annotations...");
+      send({ type: "generate", annotations: data });
+    }
+
+    // If neither path had work, nothing to do (shouldn't happen due to hasChanges check)
+    if (batchOps.length === 0 && !hasTextAnnotations()) {
+      showToast("Nothing to confirm — make some visual changes first");
+    }
   });
 
-  // Handle generate progress + completion from CLI
+  // Handle commitBatch completion from CLI
+  onMessage((msg) => {
+    if (msg.type === "commitBatchComplete") {
+      // Only reset generating if no generate is also pending
+      if (!hasTextAnnotations()) {
+        generating = false;
+        updateGenerateButton(hasChanges());
+      }
+
+      const successCount = (msg as any).results?.filter((r: any) => r.success).length ?? 0;
+      const totalCount = (msg as any).results?.length ?? 0;
+      const undoIds = (msg as any).undoIds ?? [];
+
+      if (msg.success) {
+        addChangeEntry({
+          type: "commitBatch",
+          componentName: "Batch Apply",
+          filePath: "",
+          summary: `${successCount}/${totalCount} changes applied`,
+          state: "active",
+          revertData: { type: "batchApplyUndo", undoIds },
+        });
+        showToast(`Applied ${successCount}/${totalCount} changes`);
+        clearSelection();
+        clearAnnotationLayer();
+        resetCanvas();
+      } else if (successCount > 0) {
+        // Partial success
+        addChangeEntry({
+          type: "commitBatch",
+          componentName: "Batch Apply",
+          filePath: "",
+          summary: `${successCount}/${totalCount} changes applied (${totalCount - successCount} failed)`,
+          state: "active",
+          revertData: { type: "batchApplyUndo", undoIds },
+        });
+        showToast(`Applied ${successCount}/${totalCount} — ${totalCount - successCount} failed`);
+        clearSelection();
+        clearAnnotationLayer();
+        resetCanvas();
+      } else {
+        showToast(`Error: ${(msg as any).error || "Batch apply failed"}`);
+        cooldownUntil = Date.now() + 5000;
+        generating = false;
+        updateGenerateButton(hasChanges());
+      }
+    }
+  });
+
+  // Handle generate progress + completion from CLI (text annotations only)
   onMessage((msg) => {
     if (msg.type === "generateProgress") {
       showToast(msg.message);
@@ -310,14 +378,11 @@ function init(): void {
           .map((c) => c.description || c.filePath)
           .join(", ");
         showToast(`Applied: ${summary}`);
-        // (#6) Clear selection first (closes sidebar, avoids stale refs after HMR)
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
-
       } else {
         showToast(`Error: ${msg.error || "Generation failed"}`);
-        // (#8) 5 second cooldown after errors to prevent spam
         cooldownUntil = Date.now() + 5000;
       }
     }

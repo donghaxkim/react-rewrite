@@ -38,6 +38,7 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
           componentName: name,
           filePath,
           lineNumber: frame.lineNumber ?? 0,
+          columnNumber: (frame as any).columnNumber ?? 0,
         };
         break;
       }
@@ -58,6 +59,7 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
             componentName: name,
             filePath: debugSource?.fileName || "",
             lineNumber: debugSource?.lineNumber || 0,
+            columnNumber: debugSource?.columnNumber ?? 0,
           };
           break;
         }
@@ -108,6 +110,7 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
           componentName: name,
           filePath,
           lineNumber: frame.lineNumber ?? 0,
+          columnNumber: (frame as any).columnNumber ?? 0,
         };
         break;
       }
@@ -127,6 +130,7 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
             componentName: name,
             filePath: debugSource?.fileName || "",
             lineNumber: debugSource?.lineNumber || 0,
+            columnNumber: debugSource?.columnNumber ?? 0,
           };
           break;
         }

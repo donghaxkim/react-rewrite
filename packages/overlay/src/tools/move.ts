@@ -4,7 +4,7 @@
 // No longer a ToolEventHandler; these are standalone functions.
 
 import type { MoveEntry } from "../move-state.js";
-import { applyDragVisual, settleDragVisual } from "../move-state.js";
+import { applyDragVisual, settleDragVisual, captureParentLayout } from "../move-state.js";
 import { addChangeEntry } from "../changelog.js";
 import {
   addMove,
@@ -59,6 +59,7 @@ export function tryStartMove(clientX: number, clientY: number, el: HTMLElement):
       componentName: selection.componentName,
       filePath: selection.filePath,
       lineNumber: selection.lineNumber,
+      columnNumber: selection.columnNumber,
     },
     element: selectedEl,
     placeholder: null,
@@ -73,6 +74,7 @@ export function tryStartMove(clientX: number, clientY: number, el: HTMLElement):
       columnNumber: selection.columnNumber,
       tagName: selectedEl.tagName.toLowerCase(),
     },
+    parentLayout: captureParentLayout(selectedEl),
   };
 
   addMove(entry);

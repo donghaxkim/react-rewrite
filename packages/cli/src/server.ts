@@ -17,6 +17,7 @@ import { generate } from "./generate.js";
 import { isProjectFilePathSafe, resolveProjectFilePath } from "./path-resolver.js";
 import { discoverFile } from "./file-discovery.js";
 import { applyAllChanges } from "./claude-apply.js";
+import { executeBatch } from "./batch-transform.js";
 
 interface SketchServerOptions {
   port: number;
@@ -226,6 +227,54 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               success: false,
               error: err instanceof Error ? err.message : String(err),
             });
+          }
+          break;
+        }
+
+        case "commitBatch": {
+          try {
+            const batchResult = executeBatch(msg.operations, projectRoot);
+
+            // Create undo entries for each file that was modified
+            const batchUndoIds: string[] = [];
+            for (const entry of batchResult.undoEntries) {
+              const undoId = randomUUID();
+              undoStack.push({
+                id: undoId,
+                filePath: entry.filePath,
+                content: entry.content,
+                afterContent: entry.afterContent,
+                timestamp: Date.now(),
+              });
+              batchUndoIds.push(undoId);
+            }
+
+            // Map undo IDs to per-op results
+            const resultsWithUndo = batchResult.results.map(r => ({
+              ...r,
+              undoId: r.success ? batchUndoIds[0] : undefined, // simplified — all ops share file-level undo
+            }));
+
+            const allSuccess = batchResult.results.every(r => r.success);
+            send(ws, {
+              type: "commitBatchComplete",
+              success: allSuccess,
+              results: resultsWithUndo,
+              undoIds: batchUndoIds,
+            } as any);
+          } catch (err) {
+            send(ws, {
+              type: "commitBatchComplete",
+              success: false,
+              results: msg.operations.map((op: any) => ({
+                op: op.op,
+                file: op.file,
+                line: op.line ?? op.fromLine ?? 0,
+                success: false,
+                error: err instanceof Error ? err.message : String(err),
+              })),
+              undoIds: [],
+            } as any);
           }
           break;
         }
@@ -451,7 +500,6 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
             apiKey: resolvedKey,
             projectRoot: projectRoot,
             model: model,
-            tokens: resolvedTokens,
             onProgress(stage, message) {
               send(ws, { type: "generateProgress", stage, message });
             },
@@ -498,6 +546,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "updateProperties":
         case "updateText":
         case "revertChanges":
+        case "commitBatch":
           // Sequential processing
           queue.push({ msg, ws });
           processQueue();

@@ -70,6 +70,49 @@ export type ApplyChange =
       resolvedDy: string | null;
     };
 
+export type BatchOperation =
+  | {
+      op: "updateClass";
+      file: string;
+      line: number;
+      col: number;
+      componentName?: string;
+      updates: Array<{
+        tailwindPrefix: string;
+        tailwindToken: string | null;
+        value: string;
+        relatedPrefixes?: string[];
+        classPattern?: string;
+        standalone?: boolean;
+      }>;
+    }
+  | {
+      op: "updateText";
+      file: string;
+      line: number;
+      col: number;
+      componentName?: string;
+      originalText: string;
+      newText: string;
+    }
+  | {
+      op: "reorder";
+      file: string;
+      fromLine: number;
+      toLine: number;
+    }
+  | {
+      op: "moveSpacing";
+      file: string;
+      line: number;
+      col: number;
+      componentName?: string;
+      axis: "x" | "y";
+      token: string;
+      direction: "positive" | "negative";
+      layoutContext: "flex" | "grid" | "block" | "positioned";
+    };
+
 export type ClientMessage =
   | {
       type: "reorder";
@@ -127,7 +170,11 @@ export type ClientMessage =
     }
   | { type: "revertChanges"; undoIds: string[] }
   | { type: "discoverFile"; componentName: string }
-  | { type: "applyAllChanges"; changes: ApplyChange[] };
+  | { type: "applyAllChanges"; changes: ApplyChange[] }
+  | {
+      type: "commitBatch";
+      operations: BatchOperation[];
+    };
 
 export type ServerMessage =
   | { type: "reorderComplete"; success: boolean; error?: string }
@@ -157,6 +204,20 @@ export type ServerMessage =
       success: boolean;
       appliedCount: number;
       failedCount: number;
+      error?: string;
+      undoIds: string[];
+    }
+  | {
+      type: "commitBatchComplete";
+      success: boolean;
+      results: Array<{
+        op: BatchOperation["op"];
+        file: string;
+        line: number;
+        success: boolean;
+        error?: string;
+        undoId?: string;
+      }>;
       error?: string;
       undoIds: string[];
     }
@@ -278,6 +339,7 @@ export interface ComponentRef {
   componentName: string;
   filePath: string;
   lineNumber: number;
+  columnNumber?: number;
 }
 
 export type ToolType = "select" | "text";
@@ -296,9 +358,11 @@ export interface ColorOverride {
   type: "colorChange";
   id: string;
   component: ComponentRef;
+  columnNumber: number;
   property: "color" | "backgroundColor";
   fromColor: string;
   toColor: string;
+  pickedToken?: string;
 }
 
 export interface TextEditAnnotation {
@@ -348,7 +412,7 @@ export type RevertData =
 export interface ChangeEntry {
   id: string;
   timestamp: number;
-  type: "property" | "move" | "textEdit" | "textAnnotation" | "generate";
+  type: "property" | "move" | "textEdit" | "textAnnotation" | "generate" | "commitBatch";
   componentName: string;
   filePath: string;
   summary: string;

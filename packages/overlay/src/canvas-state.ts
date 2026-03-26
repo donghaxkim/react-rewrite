@@ -2,10 +2,11 @@
 import type {
   ToolType, Annotation, TextAnnotation, ColorOverride,
   ComponentRef, CanvasUndoAction, SerializedAnnotations,
-  TextEditAnnotation, ElementIdentity,
+  TextEditAnnotation, ElementIdentity, BatchOperation,
 } from "@frameup/shared";
-import type { MoveEntry } from "./move-state.js";
+import type { MoveEntry, ParentLayout } from "./move-state.js";
 import { applyMoveTransform, clearMoveTransform, reacquireMovedElement } from "./move-state.js";
+import { getTokenMap } from "./properties/tailwind-resolver.js";
 
 /** Runtime extension of ColorOverride — adds the DOM element reference (not serializable). */
 export type ColorOverrideRuntime = ColorOverride & { targetElement: HTMLElement };
@@ -343,40 +344,156 @@ export function canUndo(): boolean {
   return undoStack.length > 0;
 }
 
-// --- Serialization ---
+// ── Batch operations (deterministic transforms) ──────────────────────────
 
-export function serializeAnnotations(): SerializedAnnotations {
-  const serializedMoves = Array.from(moves.values()).map((entry) => ({
-    component: entry.componentRef.componentName,
-    file: entry.componentRef.filePath,
-    line: entry.componentRef.lineNumber,
-    originalRect: {
-      top: entry.originalRect.top,
-      left: entry.originalRect.left,
-      width: entry.originalRect.width,
-      height: entry.originalRect.height,
-    },
-    delta: { dx: entry.delta.dx, dy: entry.delta.dy },
-    siblingRects: (() => {
-      const parent = entry.element.parentElement;
-      if (!parent) return undefined;
-      const rects: Array<{ component: string; rect: { top: number; left: number; width: number; height: number } }> = [];
-      for (const child of Array.from(parent.children)) {
-        if (child === entry.element || !(child instanceof HTMLElement)) continue;
-        const rect = child.getBoundingClientRect();
-        rects.push({
-          component: child.tagName.toLowerCase(),
-          rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+const ROOT_FONT_SIZE_PX = 16;
+
+/**
+ * Snap a pixel delta to the nearest Tailwind spacing token.
+ * Returns the token name (e.g., "4") or an arbitrary value string (e.g., "[32px]").
+ */
+function snapToSpacingToken(px: number): string {
+  const absPx = Math.abs(px);
+  const tokenMap = getTokenMap();
+
+  let bestToken: string | null = null;
+  let bestDist = Infinity;
+
+  for (const [token, cssValue] of tokenMap.spacing) {
+    let tokenPx: number;
+    if (cssValue.endsWith("rem")) {
+      tokenPx = parseFloat(cssValue) * ROOT_FONT_SIZE_PX;
+    } else if (cssValue.endsWith("px")) {
+      tokenPx = parseFloat(cssValue);
+    } else {
+      continue;
+    }
+    if (Number.isNaN(tokenPx)) continue;
+
+    const dist = Math.abs(absPx - tokenPx);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestToken = token;
+    }
+  }
+
+  // Accept if within 15% relative threshold (max 8px)
+  if (bestToken !== null && bestDist <= Math.min(absPx * 0.15, 8)) {
+    return bestToken;
+  }
+
+  // Arbitrary value fallback
+  return `[${Math.round(absPx)}px]`;
+}
+
+/**
+ * Derive the batch engine layout context from the captured parent layout.
+ */
+function deriveLayoutContext(layout?: ParentLayout): "flex" | "grid" | "block" | "positioned" {
+  if (!layout) return "block";
+  const pos = layout.elementPosition;
+  if (pos === "absolute" || pos === "fixed") return "positioned";
+  const display = layout.display;
+  if (display === "flex" || display === "inline-flex") return "flex";
+  if (display === "grid" || display === "inline-grid") return "grid";
+  return "block";
+}
+
+/**
+ * Build deterministic batch operations from current canvas state.
+ * Returns operations for color changes, text edits, and moves.
+ * Text annotations (freeform) are NOT included — they remain in the AI path.
+ */
+export function buildBatchOperations(): BatchOperation[] {
+  const ops: BatchOperation[] = [];
+
+  // Color changes → updateClass
+  for (const ann of annotations) {
+    if (ann.type === "colorChange") {
+      const colorAnn = ann as ColorOverride;
+      const prefix = colorAnn.property === "backgroundColor" ? "bg" : "text";
+      ops.push({
+        op: "updateClass",
+        file: colorAnn.component.filePath,
+        line: colorAnn.component.lineNumber,
+        col: colorAnn.columnNumber ?? 0,
+        componentName: colorAnn.component.componentName,
+        updates: [{
+          tailwindPrefix: prefix,
+          tailwindToken: colorAnn.pickedToken ?? null,
+          value: colorAnn.toColor,
+        }],
+      });
+    }
+
+    // Text edits → updateText
+    if (ann.type === "textEdit") {
+      const textAnn = ann as TextEditAnnotation;
+      if (textAnn.filePath) { // Only if we have a file path
+        ops.push({
+          op: "updateText",
+          file: textAnn.filePath,
+          line: textAnn.lineNumber,
+          col: textAnn.columnNumber,
+          componentName: textAnn.componentName,
+          originalText: textAnn.originalText,
+          newText: textAnn.newText,
         });
       }
-      return rects.length > 0 ? rects : undefined;
-    })(),
-  }));
+    }
+  }
 
+  // Moves → moveSpacing
+  for (const entry of moves.values()) {
+    if (!entry.componentRef.filePath) continue;
+
+    const col = entry.identity.columnNumber;
+    const layout = deriveLayoutContext(entry.parentLayout);
+
+    if (Math.abs(entry.delta.dx) >= 1) {
+      ops.push({
+        op: "moveSpacing",
+        file: entry.componentRef.filePath,
+        line: entry.componentRef.lineNumber,
+        col,
+        componentName: entry.componentRef.componentName,
+        axis: "x",
+        token: snapToSpacingToken(entry.delta.dx),
+        direction: entry.delta.dx > 0 ? "positive" : "negative",
+        layoutContext: layout,
+      });
+    }
+
+    if (Math.abs(entry.delta.dy) >= 1) {
+      ops.push({
+        op: "moveSpacing",
+        file: entry.componentRef.filePath,
+        line: entry.componentRef.lineNumber,
+        col,
+        componentName: entry.componentRef.componentName,
+        axis: "y",
+        token: snapToSpacingToken(entry.delta.dy),
+        direction: entry.delta.dy > 0 ? "positive" : "negative",
+        layoutContext: layout,
+      });
+    }
+  }
+
+  return ops;
+}
+
+/**
+ * Check if there are any text annotations (freeform notes) that need AI generation.
+ */
+export function hasTextAnnotations(): boolean {
+  return annotations.some(a => a.type === "text");
+}
+
+/**
+ * Serialize only the text annotations for the AI generate path.
+ */
+export function serializeTextAnnotationsOnly(): SerializedAnnotations {
   const anns: SerializedAnnotations["annotations"] = [];
-  const colorChanges: SerializedAnnotations["colorChanges"] = [];
-  const textEdits: SerializedAnnotations["textEdits"] = [];
-
   for (const ann of annotations) {
     if (ann.type === "text") {
       anns.push({
@@ -387,27 +504,7 @@ export function serializeAnnotations(): SerializedAnnotations {
         targetFile: ann.targetComponent?.filePath,
         targetLine: ann.targetComponent?.lineNumber,
       });
-    } else if (ann.type === "colorChange") {
-      colorChanges.push({
-        component: ann.component.componentName,
-        file: ann.component.filePath,
-        line: ann.component.lineNumber,
-        property: ann.property,
-        from: ann.fromColor,
-        to: ann.toColor,
-        pickedToken: ann.pickedToken,
-      });
-    } else if (ann.type === "textEdit") {
-      textEdits.push({
-        component: ann.componentName,
-        file: ann.filePath,
-        line: ann.lineNumber,
-        column: ann.columnNumber,
-        originalText: ann.originalText,
-        newText: ann.newText,
-      });
     }
   }
-
-  return { moves: serializedMoves, annotations: anns, colorChanges, textEdits };
+  return { moves: [], annotations: anns, colorChanges: [], textEdits: [] };
 }

@@ -9,22 +9,43 @@ export function getParser(filePath: string): string {
   return ext === ".tsx" || ext === ".ts" ? "tsx" : "babel";
 }
 
-export function reorderComponent(
-  filePath: string,
-  fromLine: number,
-  toLine: number
-): string {
-  const source = fs.readFileSync(filePath, "utf-8");
+// ── I/O-free helpers (used by both single-op wrappers and batch engine) ──
+
+/**
+ * Parse source code into a jscodeshift Collection.
+ * Pure function — no file I/O.
+ */
+export function parseSource(source: string, filePath: string) {
   const parser = getParser(filePath);
   const j = jscodeshift.withParser(parser);
   const root = j(source);
   const quoteStyle = detectQuoteStyle(source);
+  return { j, root, quoteStyle };
+}
 
-  // Find all JSX elements and fragments
+/**
+ * Find a JSXElement at a given line:col in the AST.
+ * Returns the ASTPath or null.
+ */
+export function findJSXElementAt(j: any, root: any, line: number, col: number): any | null {
+  let target: any = null;
+  root.find(j.JSXElement).forEach((p: any) => {
+    const loc = p.node.openingElement.loc;
+    if (loc && loc.start.line === line && loc.start.column === col) {
+      target = p;
+    }
+  });
+  return target;
+}
+
+/**
+ * Reorder JSX siblings by swapping elements at the given lines.
+ * Mutates the AST in place — no I/O.
+ */
+export function mutateReorder(j: any, root: any, fromLine: number, toLine: number): void {
   const jsxElements = root.find(j.JSXElement);
   const jsxFragments = root.find(j.JSXFragment);
 
-  // Find elements at the specified lines
   const findAtLine = (collection: any, line: number) => {
     let found: any = null;
     collection.forEach((p: any) => {
@@ -44,9 +65,6 @@ export function reorderComponent(
   if (!fromNode) throw new Error(`Component not found at line ${fromLine}. If you have unsaved changes in your editor, save your files and try again.`);
   if (!toNode) throw new Error(`Component not found at line ${toLine}. If you have unsaved changes in your editor, save your files and try again.`);
 
-  // Walk up to find the actual node that lives in the parent's children array.
-  // A JSXElement might be wrapped in a LogicalExpression inside a JSXExpressionContainer.
-  // We need to walk up until we find a node whose parent has a `children` array containing it.
   function getMovableNode(nodePath: any): any {
     let current = nodePath;
     while (current.parent) {
@@ -62,7 +80,6 @@ export function reorderComponent(
   const fromMovable = getMovableNode(fromNode);
   const toMovable = getMovableNode(toNode);
 
-  // Get the parent's children array
   const fromParent = fromMovable.parent;
   const toParent = toMovable.parent;
 
@@ -78,25 +95,19 @@ export function reorderComponent(
     throw new Error("Elements are not siblings in the same parent");
   }
 
-  // Capture the whitespace (JSXText) node before the fromNode to move with it
-  // This preserves formatting: each element has leading whitespace
   const fromWhitespace = fromIndex > 0 && children[fromIndex - 1]?.type === "JSXText"
     ? children[fromIndex - 1]
     : null;
 
-  // Remove the element and its preceding whitespace
   if (fromWhitespace) {
     const wsIndex = children.indexOf(fromWhitespace);
-    children.splice(wsIndex, 2); // remove whitespace + element
+    children.splice(wsIndex, 2);
   } else {
     children.splice(fromIndex, 1);
   }
 
-  // Recalculate toIndex after removal
   const newToIndex = children.indexOf(toMovable.node);
 
-  // Insert before the target's preceding whitespace if it exists
-  // Find the whitespace before the target
   const toWsIndex = newToIndex > 0 && children[newToIndex - 1]?.type === "JSXText"
     ? newToIndex - 1
     : newToIndex;
@@ -106,7 +117,17 @@ export function reorderComponent(
   } else {
     children.splice(toWsIndex, 0, fromMovable.node);
   }
+}
 
+export function reorderComponent(
+  filePath: string,
+  fromLine: number,
+  toLine: number
+): string {
+  const source = fs.readFileSync(filePath, "utf-8");
+  const { j, root, quoteStyle } = parseSource(source, filePath);
+
+  mutateReorder(j, root, fromLine, toLine);
   return root.toSource({ quote: quoteStyle });
 }
 
@@ -189,7 +210,7 @@ export function getSiblings(
 
 // ── updateClassName ─────────────────────────────────────────────────────
 
-interface ClassNameUpdate {
+export interface ClassNameUpdate {
   tailwindPrefix: string;
   tailwindToken: string | null;
   value: string;
@@ -377,41 +398,15 @@ function checkConflictingConditional(
   return false;
 }
 
-export function updateClassName(
-  filePath: string,
-  lineNumber: number,
-  columnNumber: number,
-  updates: ClassNameUpdate[]
-): string {
-  const source = fs.readFileSync(filePath, "utf-8");
-  const parser = getParser(filePath);
-  const j = jscodeshift.withParser(parser);
-  const root = j(source);
-  const quoteStyle = detectQuoteStyle(source);
-
-  // Find JSX element at line:col
-  let target: any = null;
-  root.find(j.JSXElement).forEach((p) => {
-    const loc = p.node.openingElement.loc;
-    if (
-      loc &&
-      loc.start.line === lineNumber &&
-      loc.start.column === columnNumber
-    ) {
-      target = p;
-    }
-  });
-
-  if (!target) {
-    throw new Error(
-      `No JSX element found at ${lineNumber}:${columnNumber}`
-    );
-  }
-
+/**
+ * Apply className updates to a JSX element node.
+ * Mutates the AST in place — no I/O. The `j` parameter is the jscodeshift API instance.
+ * Throws on dynamic className or conflicting conditional classes.
+ */
+export function mutateClassName(j: any, target: any, updates: ClassNameUpdate[]): void {
   const openingElement = target.node.openingElement;
   const attrs = openingElement.attributes ?? [];
 
-  // Find className attribute
   const classNameAttr = attrs.find(
     (a: any) =>
       a.type === "JSXAttribute" &&
@@ -420,7 +415,6 @@ export function updateClassName(
   );
 
   if (!classNameAttr) {
-    // No className — create one
     const allClasses = updates.map(buildClass).join(" ");
     openingElement.attributes.push(
       j.jsxAttribute(
@@ -428,30 +422,25 @@ export function updateClassName(
         j.stringLiteral(allClasses)
       )
     );
-    return root.toSource({ quote: quoteStyle });
+    return;
   }
 
   const attrValue = classNameAttr.value;
 
-  // Case 1: String literal — className="flex p-4 bg-white"
   if (attrValue.type === "StringLiteral") {
     attrValue.value = updateClassString(attrValue.value, updates);
-    return root.toSource({ quote: quoteStyle });
+    return;
   }
 
-  // Case 2: JSXExpressionContainer
   if (attrValue.type === "JSXExpressionContainer") {
     const expr = attrValue.expression;
 
-    // 2a: Template literal — className={`flex px-4 ${color}`}
     if (expr.type === "TemplateLiteral") {
-      // Update static quasis
       for (const quasi of expr.quasis) {
         const raw = quasi.value.raw;
         const classes = raw.split(/\s+/).filter(Boolean);
         if (classes.length === 0) continue;
 
-        // Check if any class matches any update prefix or related prefix
         let hasMatch = false;
         for (const update of updates) {
           const allPrefixes = [
@@ -465,7 +454,6 @@ export function updateClassName(
         }
 
         if (hasMatch) {
-          // Preserve leading/trailing whitespace in template parts
           const leadingWs = raw.match(/^(\s*)/)?.[1] ?? "";
           const trailingWs = raw.match(/(\s*)$/)?.[1] ?? "";
           const updated = updateClassString(raw.trim(), updates);
@@ -475,22 +463,19 @@ export function updateClassName(
           };
         }
       }
-      return root.toSource({ quote: quoteStyle });
+      return;
     }
 
-    // 2b: Call expression — className={cn("flex p-4", ...)}
     if (expr.type === "CallExpression") {
       const args = expr.arguments;
 
       for (const update of updates) {
-        // Check for conflicting conditional args
         if (checkConflictingConditional(args, update.tailwindPrefix)) {
           throw new Error(
             `CONFLICTING_CLASS: "${update.tailwindPrefix}" appears in a conditional argument`
           );
         }
 
-        // Find the string arg that contains the prefix and modify it
         let found = false;
         for (const arg of args) {
           if (arg.type === "StringLiteral") {
@@ -507,7 +492,6 @@ export function updateClassName(
           }
         }
 
-        // If not found in any existing string, append to the first string arg
         if (!found) {
           const firstStr = args.find((a: any) => a.type === "StringLiteral");
           if (firstStr) {
@@ -518,11 +502,9 @@ export function updateClassName(
           }
         }
       }
-
-      return root.toSource({ quote: quoteStyle });
+      return;
     }
 
-    // 2c: Dynamic — className={cls}
     throw new Error(
       `DYNAMIC_CLASSNAME: className is a dynamic expression that cannot be statically modified`
     );
@@ -531,7 +513,61 @@ export function updateClassName(
   throw new Error(`Unsupported className value type: ${attrValue.type}`);
 }
 
+export function updateClassName(
+  filePath: string,
+  lineNumber: number,
+  columnNumber: number,
+  updates: ClassNameUpdate[]
+): string {
+  const source = fs.readFileSync(filePath, "utf-8");
+  const { j, root, quoteStyle } = parseSource(source, filePath);
+
+  const target = findJSXElementAt(j, root, lineNumber, columnNumber);
+  if (!target) {
+    throw new Error(
+      `No JSX element found at ${lineNumber}:${columnNumber}`
+    );
+  }
+
+  mutateClassName(j, target, updates);
+  return root.toSource({ quote: quoteStyle });
+}
+
 // ── updateTextContent ────────────────────────────────────────────────────
+
+/**
+ * Replace text content of a JSX element node.
+ * Mutates the AST in place — no I/O.
+ * Returns true if a matching text child was found and replaced.
+ */
+export function mutateTextContent(target: any, originalText: string, newText: string): boolean {
+  const children = target.node.children;
+  if (!children) return false;
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.type === "JSXText") {
+      const trimmed = child.value.trim();
+      if (trimmed === originalText.trim()) {
+        const idx = child.value.indexOf(trimmed);
+        const prefixWs = child.value.slice(0, idx);
+        const suffixWs = child.value.slice(idx + trimmed.length);
+        child.value = prefixWs + newText + suffixWs;
+        return true;
+      }
+    }
+    if (
+      child.type === "JSXExpressionContainer" &&
+      child.expression.type === "StringLiteral" &&
+      child.expression.value === originalText
+    ) {
+      child.expression.value = newText;
+      return true;
+    }
+  }
+
+  return false;
+}
 
 /**
  * Replace text content of a JSX element at the given source position.
@@ -545,45 +581,13 @@ export function updateTextContent(
   newText: string,
 ): string | null {
   const source = fs.readFileSync(filePath, "utf-8");
-  const parser = getParser(filePath);
-  const j = jscodeshift.withParser(parser);
-  const root = j(source);
-  const quoteStyle = detectQuoteStyle(source);
+  const { j, root, quoteStyle } = parseSource(source, filePath);
 
-  let target: any = null;
-  root.find(j.JSXElement).forEach((p) => {
-    const loc = p.node.openingElement.loc;
-    if (loc && loc.start.line === lineNumber && loc.start.column === columnNumber) {
-      target = p;
-    }
-  });
-
+  const target = findJSXElementAt(j, root, lineNumber, columnNumber);
   if (!target) return null;
 
-  const children = target.node.children;
-  if (!children) return null;
-
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i];
-    if (child.type === "JSXText") {
-      const trimmed = child.value.trim();
-      if (trimmed === originalText.trim()) {
-        const idx = child.value.indexOf(trimmed);
-        const prefixWs = child.value.slice(0, idx);
-        const suffixWs = child.value.slice(idx + trimmed.length);
-        child.value = prefixWs + newText + suffixWs;
-        return root.toSource({ quote: quoteStyle });
-      }
-    }
-    if (
-      child.type === "JSXExpressionContainer" &&
-      child.expression.type === "StringLiteral" &&
-      child.expression.value === originalText
-    ) {
-      child.expression.value = newText;
-      return root.toSource({ quote: quoteStyle });
-    }
+  if (mutateTextContent(target, originalText, newText)) {
+    return root.toSource({ quote: quoteStyle });
   }
-
   return null;
 }

@@ -66,6 +66,7 @@ export const colorHandler: ToolEventHandler = {
             type: "colorChange",
             id,
             component: targetComp,
+            columnNumber: targetComp.columnNumber ?? 0,
             targetElement: targetEl,
             property: selectedProperty,
             fromColor,
