@@ -7,3 +7,4 @@ dist/
 .env.local
 package-lock.json
 .playwright-mcp/
+docs/superpowers/
