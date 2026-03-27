@@ -116,16 +116,16 @@ function isFullViewportOverlay(el: Element, style: CSSStyleDeclaration): boolean
 
 /**
  * Validates whether an element is a valid selection/hover target.
- * Ported from react-grab's isValidGrabbableElement with adaptations for FrameUp.
+ * Ported from react-grab's isValidGrabbableElement with adaptations for ReactRewrite.
  */
 export function isValidElement(el: Element): boolean {
   const tag = el instanceof HTMLElement ? el.tagName.toLowerCase() : "";
   if (tag === "html" || tag === "body") return false;
   if (el instanceof HTMLElement && isFullPageElement(el)) return false;
 
-  if (el.closest("#frameup-root")) return false;
-  if (el instanceof HTMLElement && el.hasAttribute("data-frameup-interaction")) return false;
-  if (el instanceof HTMLElement && el.hasAttribute("data-frameup-placeholder")) return false;
+  if (el.closest("#react-rewrite-root")) return false;
+  if (el instanceof HTMLElement && el.hasAttribute("data-react-rewrite-interaction")) return false;
+  if (el instanceof HTMLElement && el.hasAttribute("data-react-rewrite-placeholder")) return false;
 
   const now = performance.now();
   const cached = visibilityCache.get(el);

@@ -1,4 +1,4 @@
-import type { PropertyDescriptor } from "@frameup/shared";
+import type { PropertyDescriptor } from "@react-rewrite/shared";
 
 // --- Layout ---
 export const LAYOUT_DESCRIPTORS: PropertyDescriptor[] = [

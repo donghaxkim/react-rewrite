@@ -1,8 +1,6 @@
 // packages/overlay/src/toolbar.ts
 import { send, onMessage, setOnMaxRetries, setOnTabTakenOver, setOnReconnected, manualReconnect } from "./bridge.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY, FONT_FACE_CSS } from "./design-tokens.js";
-import { setOnCountChange, confirmAll, discardAll, isApplying } from "./pending-changes.js";
-
 let shadowRoot: ShadowRoot | null = null;
 let undoBtn: HTMLButtonElement | null = null;
 let undoCount = 0;
@@ -169,41 +167,11 @@ const TOOLBAR_STYLES = `
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
   }
-  .pending-actions {
-    display: none;
-    align-items: center;
-    gap: 4px;
-  }
-  .confirm-btn {
-    background: ${COLORS.accent};
-    border: none;
-    border-radius: ${RADII.sm};
-    color: white;
-    padding: 6px 14px;
-    font-size: 12px;
-    font-weight: 600;
-    font-family: ${FONT_FAMILY};
-    cursor: pointer;
-    transition: background ${TRANSITIONS.fast};
-    white-space: nowrap;
-  }
-  .confirm-btn:hover { background: ${COLORS.accentHover}; }
-  .confirm-btn:disabled { background: ${COLORS.bgTertiary}; color: ${COLORS.textTertiary}; cursor: wait; }
-  .discard-btn {
-    padding: 4px 8px;
-    background: transparent;
-    color: #9ca3af;
-    border: 1px solid #374151;
-    border-radius: 6px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .discard-btn:hover { color: #ef4444; border-color: #ef4444; }
 `;
 
 export function mountToolbar(onClose: () => void): void {
   const host = document.createElement("div");
-  host.id = "frameup-root";
+  host.id = "react-rewrite-root";
   document.body.appendChild(host);
 
   shadowRoot = host.attachShadow({ mode: "open" });
@@ -222,11 +190,7 @@ export function mountToolbar(onClose: () => void): void {
     </button>
     <span class="divider"></span>
     <button class="generate-btn" disabled>Confirm</button>
-    <div class="pending-actions" style="display:none">
-      <button class="confirm-btn" title="Confirm Changes">Confirm Changes</button>
-      <button class="discard-btn" title="Discard all pending changes">✕</button>
-    </div>
-    <button class="icon-btn close-btn" title="Close FrameUp">
+    <button class="icon-btn close-btn" title="Close ReactRewrite">
       ${CLOSE_SVG}
     </button>
   `;
@@ -259,29 +223,6 @@ export function mountToolbar(onClose: () => void): void {
   generateBtn!.addEventListener("click", () => {
     if (onGenerate) onGenerate();
   });
-
-  const pendingActions = toolbar.querySelector(".pending-actions") as HTMLDivElement;
-  const confirmBtn = toolbar.querySelector(".confirm-btn") as HTMLButtonElement;
-  const discardBtn = toolbar.querySelector(".discard-btn") as HTMLButtonElement;
-
-  setOnCountChange((count) => {
-    if (count > 0 && !isApplying()) {
-      pendingActions.style.display = "flex";
-      confirmBtn.textContent = `Confirm Changes (${count})`;
-      confirmBtn.disabled = false;
-    } else if (isApplying()) {
-      pendingActions.style.display = "flex";
-      confirmBtn.textContent = "Applying...";
-      confirmBtn.disabled = true;
-      discardBtn.style.display = "none";
-    } else {
-      pendingActions.style.display = "none";
-      discardBtn.style.display = "inline-block";
-    }
-  });
-
-  confirmBtn.addEventListener("click", () => { confirmAll(); });
-  discardBtn.addEventListener("click", () => { discardAll(); });
 
   // Keyboard shortcut: Ctrl/Cmd+Z for canvas undo
   document.addEventListener("keydown", (e) => {
@@ -357,7 +298,7 @@ export function mountToolbar(onClose: () => void): void {
 
 
 export function destroyToolbar(): void {
-  const host = document.getElementById("frameup-root");
+  const host = document.getElementById("react-rewrite-root");
   if (host) host.remove();
   shadowRoot = null;
   undoBtn = null;
@@ -373,12 +314,6 @@ export function setOnCanvasUndo(fn: () => boolean): void { onCanvasUndo = fn; }
 export function updateGenerateButton(enabled: boolean): void {
   if (generateBtn) generateBtn.disabled = !enabled;
 }
-
-/** Hide the Path A generate button (called when Path B is active). */
-export function hideGenerateButton(): void {
-  if (generateBtn) generateBtn.style.display = "none";
-}
-
 
 
 /**

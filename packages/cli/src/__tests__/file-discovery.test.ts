@@ -8,7 +8,7 @@ describe("discoverFile", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "frameup-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "react-rewrite-test-"));
     fs.mkdirSync(path.join(tmpDir, "src/components"), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, "src/app"), { recursive: true });
   });

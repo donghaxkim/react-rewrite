@@ -1,5 +1,5 @@
 {
-  "name": "@frameup/shared",
+  "name": "@react-rewrite/shared",
   "version": "0.1.0",
   "private": true,
   "main": "src/types.ts",

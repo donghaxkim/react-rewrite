@@ -1,5 +1,5 @@
 {
-  "name": "frameup",
+  "name": "react-rewrite",
   "version": "0.1.0",
   "description": "Visual overlay for React dev servers — select components, drag to reorder, and draw on a Figma-style canvas",
   "keywords": [
@@ -14,16 +14,16 @@
     "ast",
     "cli"
   ],
-  "homepage": "https://github.com/donghaxkim/frameup",
+  "homepage": "https://github.com/donghaxkim/react-rewrite",
   "repository": {
     "type": "git",
-    "url": "https://github.com/donghaxkim/frameup.git",
+    "url": "https://github.com/donghaxkim/react-rewrite.git",
     "directory": "packages/cli"
   },
   "license": "MIT",
   "author": "Dongha Kim",
   "bin": {
-    "frameup": "./bin/frameup.js"
+    "react-rewrite": "./bin/react-rewrite.js"
   },
   "type": "module",
   "main": "dist/index.js",
@@ -39,17 +39,15 @@
     "prepublishOnly": "pnpm run build && pnpm run test -- --run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "~0.80.0",
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
-    "dotenv": "^17.3.1",
     "http-proxy": "^1.18.1",
     "jscodeshift": "^17.1.0",
     "open": "^10.1.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@frameup/shared": "workspace:*",
+    "@react-rewrite/shared": "workspace:*",
     "@types/http-proxy": "^1.17.15",
     "@types/jscodeshift": "^17.3.0",
     "@types/ws": "^8.5.13",

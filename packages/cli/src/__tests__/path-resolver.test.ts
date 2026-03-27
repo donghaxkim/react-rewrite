@@ -7,7 +7,7 @@ import { isProjectFilePathSafe, resolveProjectFilePath } from "../path-resolver.
 const tempRoots: string[] = [];
 
 function makeProject(): string {
-  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "frameup-paths-"));
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "react-rewrite-paths-"));
   tempRoots.push(projectRoot);
   return projectRoot;
 }
@@ -60,7 +60,7 @@ describe("resolveProjectFilePath", () => {
 
   it("rejects real absolute filesystem paths outside the project root", () => {
     const projectRoot = makeProject();
-    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "frameup-outside-"));
+    const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), "react-rewrite-outside-"));
     tempRoots.push(outsideDir);
     const outsideFile = path.join(outsideDir, "Navbar.jsx");
     fs.writeFileSync(outsideFile, "export default function Navbar() { return null; }", "utf-8");

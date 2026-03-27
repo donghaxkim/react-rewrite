@@ -34,4 +34,4 @@ jobs:
       - name: Test
         run: |
           pnpm test
-          pnpm --filter @frameup/overlay exec vitest run
+          pnpm --filter @react-rewrite/overlay exec vitest run

@@ -62,7 +62,7 @@ export function initCanvasTransform(): void {
 
   // Create the wrapper that will hold page content
   wrapper = document.createElement("div");
-  wrapper.setAttribute("data-frameup-canvas-wrapper", "true");
+  wrapper.setAttribute("data-react-rewrite-canvas-wrapper", "true");
   wrapper.style.cssText = `
     transform-origin: 0 0;
     min-width: 100vw;
@@ -73,7 +73,7 @@ export function initCanvasTransform(): void {
 
   // Create dotted background (sits behind wrapper, covers viewport)
   dotBg = document.createElement("div");
-  dotBg.setAttribute("data-frameup-dot-bg", "true");
+  dotBg.setAttribute("data-react-rewrite-dot-bg", "true");
   dotBg.style.cssText = `
     position: fixed;
     top: 0;
@@ -85,18 +85,18 @@ export function initCanvasTransform(): void {
     background-color: ${COLORS.bgSecondary};
   `.trim().replace(/\n\s*/g, " ");
 
-  // Move all non-FrameUp body children into the wrapper
+  // Move all non-ReactRewrite body children into the wrapper
   const bodyChildren = Array.from(document.body.childNodes);
   for (const child of bodyChildren) {
     if (child instanceof HTMLElement) {
-      // Skip FrameUp elements
+      // Skip ReactRewrite elements
       if (
-        child.id === "frameup-root" ||
-        child.hasAttribute("data-frameup-interaction") ||
-        child.hasAttribute("data-frameup-placeholder") ||
-        child.hasAttribute("data-frameup-annotation") ||
-        child.hasAttribute("data-frameup-dot-bg") ||
-        child.hasAttribute("data-frameup-canvas-wrapper")
+        child.id === "react-rewrite-root" ||
+        child.hasAttribute("data-react-rewrite-interaction") ||
+        child.hasAttribute("data-react-rewrite-placeholder") ||
+        child.hasAttribute("data-react-rewrite-annotation") ||
+        child.hasAttribute("data-react-rewrite-dot-bg") ||
+        child.hasAttribute("data-react-rewrite-canvas-wrapper")
       ) {
         continue;
       }
@@ -109,7 +109,7 @@ export function initCanvasTransform(): void {
   wrapper.style.position = "relative";
   wrapper.style.zIndex = "1";
 
-  // Insert bg and wrapper into body (before FrameUp elements)
+  // Insert bg and wrapper into body (before ReactRewrite elements)
   document.body.insertBefore(dotBg, document.body.firstChild);
   document.body.insertBefore(wrapper, dotBg.nextSibling);
 

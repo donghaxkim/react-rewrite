@@ -7,7 +7,7 @@ import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "../design-toke
 const DEFAULT_WIDTH = 300;
 const MIN_WIDTH = 260;
 const MAX_WIDTH = 380;
-const STORAGE_KEY = "frameup-sidebar-width";
+const STORAGE_KEY = "react-rewrite-sidebar-width";
 const RESIZE_HANDLE_WIDTH = 4;
 
 // ---------------------------------------------------------------------------

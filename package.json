@@ -1,13 +1,13 @@
 {
-  "name": "frameup-monorepo",
+  "name": "react-rewrite-monorepo",
   "private": true,
   "scripts": {
     "build": "pnpm build:shared && pnpm build:overlay && pnpm build:cli",
-    "build:shared": "pnpm --filter @frameup/shared build",
-    "build:overlay": "pnpm --filter @frameup/overlay build",
-    "build:cli": "pnpm --filter frameup build",
-    "dev": "pnpm build:overlay && pnpm --filter frameup dev",
-    "test": "pnpm --filter frameup test",
+    "build:shared": "pnpm --filter @react-rewrite/shared build",
+    "build:overlay": "pnpm --filter @react-rewrite/overlay build",
+    "build:cli": "pnpm --filter react-rewrite build",
+    "dev": "pnpm build:overlay && pnpm --filter react-rewrite dev",
+    "test": "pnpm --filter react-rewrite test",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "pnpm build && changeset publish"

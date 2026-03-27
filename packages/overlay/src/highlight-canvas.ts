@@ -69,7 +69,7 @@ export function initHighlightCanvas(): void {
   if (!shadowRoot) return;
 
   canvas = document.createElement("canvas");
-  canvas.setAttribute("data-frameup-overlay", "true");
+  canvas.setAttribute("data-react-rewrite-overlay", "true");
   canvas.style.cssText = `
     position: fixed;
     top: 0;

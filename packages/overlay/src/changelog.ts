@@ -1,4 +1,4 @@
-import type { ChangeEntry } from "@frameup/shared";
+import type { ChangeEntry } from "@react-rewrite/shared";
 import { send, onMessage } from "./bridge.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { showToast } from "./toolbar.js";
@@ -62,7 +62,6 @@ export function revertEntry(id: string): void {
       return;
 
     case "cliUndo":
-    case "generateUndo":
       pendingRevertLogEntryIds.add(id);
       send({ type: "revertChanges", undoIds: entry.revertData.undoIds });
       break;
@@ -607,7 +606,7 @@ export function initChangelog(shadowRoot: ShadowRoot): void {
       for (const [id, entry] of entries) {
         if (!pendingRevertLogEntryIds.has(id)) continue;
         const revertData = entry.revertData;
-        if (revertData.type !== "cliUndo" && revertData.type !== "generateUndo") continue;
+        if (revertData.type !== "cliUndo") continue;
 
         const matchedResults = msg.results.filter((result) =>
           revertData.undoIds.includes(result.undoId),

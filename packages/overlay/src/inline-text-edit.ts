@@ -1,4 +1,4 @@
-import type { ServerMessage, ComponentInfo, ElementIdentity, TextEditAnnotation } from "@frameup/shared";
+import type { ServerMessage, ComponentInfo, ElementIdentity, TextEditAnnotation } from "@react-rewrite/shared";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
 import { getOwnerStack } from "bippy/source";
 import { resolveFrameFilePath } from "./utils/source-resolve.js";
@@ -11,9 +11,7 @@ import { addTextEditAnnotation } from "./canvas-state.js";
 import { isInternalName, isLibraryPath, isValidElement } from "./utils/component-filter.js";
 import { clearSelection, selectElement, getSelection } from "./selection.js";
 import { addChangeEntry } from "./changelog.js";
-import { addToPending } from "./pending-changes.js";
 import { computeNthOfType } from "./utils/nth-of-type.js";
-import { hasApiKey } from "./config.js";
 
 // --- Helpers ---
 
@@ -221,8 +219,8 @@ function handleDblClick(e: MouseEvent): void {
     eventTarget instanceof HTMLElement &&
     eventTarget !== document.documentElement &&
     eventTarget !== document.body &&
-    !eventTarget.hasAttribute("data-frameup-interaction") &&
-    !eventTarget.closest("#frameup-root")
+    !eventTarget.hasAttribute("data-react-rewrite-interaction") &&
+    !eventTarget.closest("#react-rewrite-root")
   ) {
     target = eventTarget;
   } else {
@@ -306,7 +304,7 @@ function handleOutsidePointerDown(e: MouseEvent): void {
   }
 
   const targetElement = eventTarget instanceof HTMLElement ? eventTarget : null;
-  if (targetElement?.closest("#frameup-root")) {
+  if (targetElement?.closest("#react-rewrite-root")) {
     commitAndExit();
     return;
   }
@@ -346,8 +344,8 @@ function resolveClickTarget(e: MouseEvent): HTMLElement | null {
     eventTarget instanceof HTMLElement &&
     eventTarget !== document.documentElement &&
     eventTarget !== document.body &&
-    !eventTarget.hasAttribute("data-frameup-interaction") &&
-    !eventTarget.closest("#frameup-root")
+    !eventTarget.hasAttribute("data-react-rewrite-interaction") &&
+    !eventTarget.closest("#react-rewrite-root")
   ) {
     return eventTarget;
   }
@@ -379,7 +377,7 @@ function commitAndExit(options?: {
   const cursorOffset = getCaretOffsetWithin(editingElement);
   const changed = newText !== originalTextContent;
 
-  console.log("[FrameUp:textEdit] commitAndExit changed:", changed, "componentInfo:", componentInfo?.componentName, "filePath:", componentInfo?.filePath);
+  console.log("[ReactRewrite:textEdit] commitAndExit changed:", changed, "componentInfo:", componentInfo?.componentName, "filePath:", componentInfo?.filePath);
 
   if (changed && componentInfo) {
     // If filePath is empty, try file discovery (grep-based lookup by component name)

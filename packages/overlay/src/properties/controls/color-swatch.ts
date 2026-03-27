@@ -1,4 +1,4 @@
-import type { PropertyDescriptor } from "@frameup/shared";
+import type { PropertyDescriptor } from "@react-rewrite/shared";
 import type { PropertyControl, OnPreview, OnCommit } from "./types.js";
 import { COLORS, FONT_FAMILY, RADII } from "../../design-tokens.js";
 import { openColorPicker, closeColorPicker } from "../../color-picker.js";

@@ -1,5 +1,5 @@
 // packages/overlay/src/tools-panel.ts
-import type { ToolType } from "@frameup/shared";
+import type { ToolType } from "@react-rewrite/shared";
 import { getActiveTool, setActiveTool, getToolOptions, setToolOption } from "./canvas-state.js";
 import { getShadowRoot } from "./toolbar.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";

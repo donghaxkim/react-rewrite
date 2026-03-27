@@ -1,4 +1,4 @@
-import type { TailwindTokenMap } from "@frameup/shared";
+import type { TailwindTokenMap } from "@react-rewrite/shared";
 
 // ---------------------------------------------------------------------------
 // Types

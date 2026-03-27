@@ -14,18 +14,12 @@ importers:
 
   packages/cli:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ~0.80.0
-        version: 0.80.0
       chalk:
         specifier: ^5.4.0
         version: 5.6.2
       commander:
         specifier: ^13.0.0
         version: 13.1.0
-      dotenv:
-        specifier: ^17.3.1
-        version: 17.3.1
       http-proxy:
         specifier: ^1.18.1
         version: 1.18.1
@@ -39,7 +33,7 @@ importers:
         specifier: ^8.18.0
         version: 8.19.0
     devDependencies:
-      '@frameup/shared':
+      '@react-rewrite/shared':
         specifier: workspace:*
         version: link:../shared
       '@types/http-proxy':
@@ -64,7 +58,7 @@ importers:
         specifier: ^0.5.32
         version: 0.5.32(@types/react@19.2.14)(react@19.2.4)
     devDependencies:
-      '@frameup/shared':
+      '@react-rewrite/shared':
         specifier: workspace:*
         version: link:../shared
       tsup:
@@ -106,15 +100,6 @@ importers:
         version: 5.9.3
 
 packages:
-
-  '@anthropic-ai/sdk@0.80.0':
-    resolution: {integrity: sha512-WeXLn7zNVk3yjeshn+xZHvld6AoFUOR3Sep6pSoHho5YbSi6HwcirqgPA5ccFuW8QTVJAAU7N8uQQC6Wa9TG+g==}
-    hasBin: true
-    peerDependencies:
-      zod: ^3.25.0 || ^4.0.0
-    peerDependenciesMeta:
-      zod:
-        optional: true
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -1132,10 +1117,6 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  dotenv@17.3.1:
-    resolution: {integrity: sha512-IO8C/dzEb6O3F9/twg6ZLXz164a2fhTnEWb95H23Dm4OuN+92NmEAlTrupP9VW6Jm3sO26tQlqyvyi4CsnY9GA==}
-    engines: {node: '>=12'}
-
   electron-to-chromium@1.5.321:
     resolution: {integrity: sha512-L2C7Q279W2D/J4PLZLk7sebOILDSWos7bMsMNN06rK482umHUrh/3lM8G7IlHFOYip2oAg5nha1rCMxr/rs6ZQ==}
 
@@ -1346,10 +1327,6 @@ packages:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
     engines: {node: '>=6'}
     hasBin: true
-
-  json-schema-to-ts@3.1.1:
-    resolution: {integrity: sha512-+DWg8jCJG2TEnpy7kOm/7/AxaYoaRbjVB4LFZLySZlWn8exGs3A4OLJR966cVvU26N7X9TWxl+Jsw7dzAqKT6g==}
-    engines: {node: '>=16'}
 
   json5@2.2.3:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
@@ -1769,9 +1746,6 @@ packages:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
     hasBin: true
 
-  ts-algebra@2.0.0:
-    resolution: {integrity: sha512-FPAhNPFMrkwz76P7cdjdmiShwMynZYN6SgOujD1urY4oNm80Ou9oMdmbR45LotcKOXoy7wSmHkRFE6Mxbrhefw==}
-
   ts-interface-checker@0.1.13:
     resolution: {integrity: sha512-Y/arvbn+rrz3JCKl9C4kVNfTfSm2/mEp5FSz5EsZSANGPSlQrpRI5M4PKF+mJnE52jOO90PnPSc3Ur3bTQw0gA==}
 
@@ -1925,10 +1899,6 @@ packages:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
 snapshots:
-
-  '@anthropic-ai/sdk@0.80.0':
-    dependencies:
-      json-schema-to-ts: 3.1.1
 
   '@babel/code-frame@7.29.0':
     dependencies:
@@ -2866,8 +2836,6 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dotenv@17.3.1: {}
-
   electron-to-chromium@1.5.321: {}
 
   enquirer@2.4.1:
@@ -3086,11 +3054,6 @@ snapshots:
       - supports-color
 
   jsesc@3.1.0: {}
-
-  json-schema-to-ts@3.1.1:
-    dependencies:
-      '@babel/runtime': 7.29.2
-      ts-algebra: 2.0.0
 
   json5@2.2.3: {}
 
@@ -3482,8 +3445,6 @@ snapshots:
       is-number: 7.0.0
 
   tree-kill@1.2.2: {}
-
-  ts-algebra@2.0.0: {}
 
   ts-interface-checker@0.1.13: {}
 

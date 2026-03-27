@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { executeBatch } from "../batch-transform.js";
-import type { BatchOperation } from "@frameup/shared";
+import type { BatchOperation } from "@react-rewrite/shared";
 import * as fs from "node:fs";
 import * as path from "node:path";
 

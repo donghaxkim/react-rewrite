@@ -1,45 +1,36 @@
-# CLAUDE.md — FrameUp Project
+# CLAUDE.md — ReactRewrite Project
 
 ## Project Overview
 
-FrameUp (npm: `frameup`) is a CLI tool that overlays on running React dev servers, enabling visual component selection, drag-to-reorder (writes to source JSX), and a Figma-style visual canvas with drawing, color, text, move, lasso tools. Built as a pnpm monorepo.
+ReactRewrite (npm: `react-rewrite`) is a CLI tool that overlays on running React dev servers, enabling visual component selection, drag-to-reorder (writes to source JSX), and a Figma-style visual canvas with drawing, color, text, move, lasso tools. Built as a pnpm monorepo.
 
 ### Architecture
 
 - `packages/cli/` — CLI entry, HTTP proxy, WebSocket server, jscodeshift AST transforms
 - `packages/overlay/` — IIFE bundle injected into user's page via proxy, lives in Shadow DOM
 - `packages/shared/` — TypeScript types shared between CLI and overlay
-- `test-app/` — Next.js app for manual testing
 
 ### Running
 
 ```bash
-# From test-app/: start test app
-pnpm dev
-
-# From root: build overlay + start CLI in watch mode
-pnpm dev
-
-# From test-app/: launch FrameUp against running app
-node ../packages/cli/bin/frameup.js 3000
-
 # Full build
 pnpm build
 
 # Tests
-pnpm test                    # CLI transform tests (13 tests)
-npx vitest run packages/overlay/src/__tests__/rdp.test.ts     # RDP tests
-npx vitest run packages/overlay/src/utils/color-math.test.ts  # Color math tests
+pnpm test
+
+# Dev mode (build overlay + watch CLI)
+pnpm dev
 ```
 
 ### Key Design Decisions
 
 - Overlay is an IIFE bundle (tsup), injected via reverse proxy — no modifications to user's app
-- All UI lives in Shadow DOM (`#frameup-root`) for style isolation
+- All UI lives in Shadow DOM (`#react-rewrite-root`) for style isolation
 - bippy library for React Fiber traversal (component resolution)
 - Uses `getOwnerStack` (React 19) with fiber walk fallback (React 18)
 - Canvas state is centralized in `canvas-state.ts` with listener pattern
-- Phase 2B will consume `serializeAnnotations()` output to generate code
+- All edits are deterministic AST transforms via jscodeshift (no AI dependency)
 
 ---
 

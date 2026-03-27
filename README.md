@@ -1,89 +1,113 @@
-# FrameUp
+# react-rewrite
 
-Edit your React app visually — like Figma, but on your running localhost. Move components, change styles, draw annotations, then hit confirm and AI writes the code for you.
+`react-rewrite` lets you edit a React app visually while it is running locally, then write those changes back to the source files in your project.
 
+It is built for local development and works by opening a proxy in front of your dev server and injecting an overlay into the page.
 
-## How It Works
+## What it does
 
-1. Start your React dev server like normal
-2. Run `npx frameup <port>` — FrameUp opens a visual overlay on top of your app
-3. Make changes visually: drag components around, edit Tailwind properties, draw and annotate
-4. Hit **Confirm** — FrameUp sends your changes to Claude, which generates the code and writes it directly to your source files
-
-That's it. You design in the browser, AI handles the code.
-
-## Quick Start
-
-```bash
-# Set your Anthropic API key
-export ANTHROPIC_API_KEY=sk-ant-...
-
-# Start your dev server
-cd my-app && pnpm dev
-
-# Launch FrameUp
-npx frameup <port>
-```
-
-## What You Can Do
-
-- **Select components** — click any element to see its React component name, source file, and location
-- **Drag to reorder** — rearrange sibling components visually
-- **Edit Tailwind properties** — adjust spacing, colors, typography, and layout in a visual sidebar
-- **Draw and annotate** — pen, text, and lasso tools overlaid on your running app
-- **AI code generation** — confirm your changes and Claude writes the JSX and Tailwind classes to your source files. Full undo support.
+- Select an element and inspect its component name, file path, and line number
+- Edit supported Tailwind-based layout, spacing, size, typography, and color properties
+- Double-click text to edit it inline
+- Reorder sibling elements
+- Stage multiple changes and apply them with **Confirm**
+- Undo in-progress canvas changes and review applied changes in the changelog
 
 ## Requirements
 
-- Node.js >= 20
-- React 18 or 19 (Next.js, Vite, or Create React App)
-- Tailwind CSS
-- Anthropic API key — [get one here](https://console.anthropic.com/settings/keys)
+- Node.js 20+
+- A React project (18+)
+- A running development server
+- Supported app setups: Next.js, Vite, and Create React App
 
-## CLI Options
+Tailwind CSS is recommended if you want to use the property editor. Text editing and some structural actions do not depend on Tailwind.
 
+## Install
+
+Run this in the root of the React app you want to edit:
+
+```bash
+npm install -D react-rewrite
 ```
-frameup [port]              Dev server port (default: auto-detected)
-  --no-open                 Don't open browser automatically
-  --host <host>             Dev server host (default: localhost)
-  --api-key <key>           Anthropic API key (overrides ANTHROPIC_API_KEY)
+
+## Quick start
+
+1. Start your React dev server as usual.
+2. In a second terminal, from the same project root, run:
+
+```bash
+npx react-rewrite
 ```
 
-## Under the Hood
+If auto-detection does not pick the right port, pass it explicitly:
 
-FrameUp runs a reverse proxy in front of your dev server and injects a visual overlay into the page via Shadow DOM — no plugins, no config files, no dependencies added to your project. Component resolution uses React Fiber traversal ([bippy](https://github.com/nicholasgasior/bippy)) to map DOM elements back to source files. When you confirm changes, your visual edits are serialized and sent to Claude, which generates code that's validated and syntax-checked before being written to your files.
+```bash
+npx react-rewrite 3000 (your port)
+```
+
+The tool opens a local proxy in your browser, shows the editing overlay, and writes confirmed changes back into files inside your project.
+
+## Basic flow
+
+1. Click an element to inspect and select it.
+2. Edit properties in the sidebar, drag to reorder where supported, or double-click text to change copy.
+3. Review pending changes in the UI.
+4. Click **Confirm** to apply them to your source files.
+
+## CLI options
+
+```text
+react-rewrite [options] [port]
+
+Arguments:
+  port           Dev server port override
+
+Options:
+  --no-open      Don't open browser automatically
+  --host <host>  Dev server host (default: "localhost")
+  --verbose      Enable debug logging
+```
+
+## Useful shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl/Cmd + Z` | Undo canvas changes |
+| `Ctrl/Cmd + Shift + L` | Toggle changelog |
+| `Ctrl/Cmd + Click` | Follow links through the overlay |
+| Double-click text | Edit text inline |
+
+## Notes
+
+- Run `react-rewrite` from your app's root directory so it can detect the framework and safely resolve file paths.
+- It only works against development builds, not production builds.
+- Only files inside the current project are eligible for writes.
 
 ## Development
 
+To work on this repository itself:
+
 ```bash
-git clone https://github.com/donghaxkim/react-frameup.git
-cd react-frameup
 pnpm install
-
-# Start the test app
-cd test-app && pnpm dev
-
-# In another terminal — build overlay + start CLI in watch mode
-pnpm dev
-
-# Launch against the test app
-node packages/cli/bin/frameup.js 3000
+pnpm build
+pnpm test -- --run
 ```
 
-### Project Structure
-
-```
-packages/
-  cli/       — CLI entry, HTTP proxy, WebSocket server, AST transforms
-  overlay/   — IIFE bundle injected into the page (Shadow DOM)
-  shared/    — TypeScript types shared between CLI and overlay
-test-app/    — Next.js app for manual testing
-```
-
-### Tests
+For iterative CLI development:
 
 ```bash
-pnpm test
+pnpm dev
+```
+
+You will still need a separate supported React app running locally to test the tool end to end.
+
+## Project structure
+
+```text
+packages/
+  cli/      CLI, proxy server, and source transforms
+  overlay/  Injected browser overlay
+  shared/   Shared TypeScript types
 ```
 
 ## License
