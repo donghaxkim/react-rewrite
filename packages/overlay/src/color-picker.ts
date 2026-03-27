@@ -14,6 +14,9 @@ type ColorPickerOptions = {
   onClose: () => void;
 };
 
+const pickerCleanup = new WeakMap<HTMLElement, () => void>();
+const pickerOnClose = new WeakMap<HTMLElement, () => void>();
+
 let activePickerEl: HTMLDivElement | null = null;
 
 export function openColorPicker(opts: ColorPickerOptions): void {
@@ -305,19 +308,19 @@ export function openColorPicker(opts: ColorPickerOptions): void {
   setTimeout(() => document.addEventListener("mousedown", onClickOutside, true), 0);
 
   // Store cleanup and onClose callback
-  (container as any)._cleanup = () => {
+  pickerCleanup.set(container, () => {
     document.removeEventListener("mousemove", onDocMouseMove);
     document.removeEventListener("mouseup", onDocMouseUp);
     document.removeEventListener("keydown", onKey, true);
     document.removeEventListener("mousedown", onClickOutside, true);
-  };
-  (container as any)._onClose = opts.onClose;
+  });
+  pickerOnClose.set(container, opts.onClose);
 }
 
 export function closeColorPicker(): void {
   if (activePickerEl) {
-    (activePickerEl as any)._cleanup?.();
-    (activePickerEl as any)._onClose?.();
+    pickerCleanup.get(activePickerEl)?.();
+    pickerOnClose.get(activePickerEl)?.();
     activePickerEl.remove();
     activePickerEl = null;
   }

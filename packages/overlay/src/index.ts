@@ -21,7 +21,7 @@ import {
   canvasUndo, canUndo, resetCanvas, hasChanges,
   onAnnotationRemoved,
   getMoves, removeMove,
-  buildBatchOperations, hasTextAnnotations, serializeTextAnnotationsOnly,
+  buildBatchOperations,
 } from "./canvas-state.js";
 import { initPropertyController, destroyPropertyController } from "./properties/property-controller.js";
 import { textHandler, cleanupTextTool } from "./tools/text.js";
@@ -32,7 +32,7 @@ import { initChangelog, destroyChangelog, addChangeEntry, isChangelogOpen, setCh
 
 declare global {
   interface Window {
-    __FRAMEUP_WS_PORT__?: number;
+    __REACT_REWRITE_WS_PORT__?: number;
   }
 }
 
@@ -46,7 +46,7 @@ let errorToastTimeout: ReturnType<typeof setTimeout> | null = null;
 /** Check if an error likely originated from overlay code */
 function isOverlayError(error: unknown): boolean {
   const stack = (error instanceof Error && error.stack) ? error.stack : String(error);
-  return /frameup|overlay/i.test(stack);
+  return /react-rewrite|overlay/i.test(stack);
 }
 
 /** Show a minimal error toast inside the Shadow DOM */
@@ -125,8 +125,8 @@ function showErrorToast(message: string): void {
 
 /** Handle an overlay error: log it and show toast */
 function handleOverlayError(error: unknown): void {
-  console.error("[FrameUp]", error);
-  showErrorToast("FrameUp encountered an error. Your app is unaffected.");
+  console.error("[ReactRewrite]", error);
+  showErrorToast("ReactRewrite encountered an error. Your app is unaffected.");
 }
 
 /** Install global error handlers that catch overlay-originating errors */
@@ -159,13 +159,13 @@ function init(): void {
   // Only run in the top-level frame — skip iframes to avoid duplicate WS connections
   if (window !== window.top) return;
 
-  const wsPort = window.__FRAMEUP_WS_PORT__;
+  const wsPort = window.__REACT_REWRITE_WS_PORT__;
   if (!wsPort) {
-    console.warn("[FrameUp] No WebSocket port found.");
+    console.warn("[ReactRewrite] No WebSocket port found.");
     return;
   }
 
-  if (document.getElementById("frameup-root")) return; // Already initialized
+  if (document.getElementById("react-rewrite-root")) return; // Already initialized
 
   connect(wsPort);
   mountToolbar(close);
@@ -251,7 +251,7 @@ function init(): void {
     updateActiveToolUI(tool);
   });
 
-  // State change → update generate + canvas undo buttons
+  // State change → update confirm + canvas undo buttons
   onStateChange(() => {
     updateGenerateButton(hasChanges());
     updateCanvasUndoButton(canUndo());
@@ -263,19 +263,11 @@ function init(): void {
     if (description) showToast(`Undo: ${description}`);
   });
 
-  // Confirm button — deterministic batch for moves/colors/text edits,
-  // AI generate only for freeform text annotations
+  // Confirm button — deterministic batch for moves/colors/text edits
   let generating = false;
-  let cooldownUntil = 0; // (#8) Error cooldown timestamp
   setOnGenerate(() => {
     if (generating) {
-      showToast("Generation in progress");
-      return;
-    }
-    const now = Date.now();
-    if (now < cooldownUntil) {
-      const remaining = Math.ceil((cooldownUntil - now) / 1000);
-      showToast(`Please wait ${remaining}s before retrying`);
+      showToast("Operation in progress");
       return;
     }
     if (!hasChanges()) {
@@ -283,27 +275,13 @@ function init(): void {
       return;
     }
 
-    // Path 1: Deterministic batch operations (colors, text edits, moves)
     const batchOps = buildBatchOperations();
-    console.log("[FrameUp] batchOps:", batchOps.length, batchOps.map(o => `${o.op}@${o.file}`), "hasTextAnns:", hasTextAnnotations());
     if (batchOps.length > 0) {
       generating = true;
       updateGenerateButton(false);
       showToast(`Applying ${batchOps.length} change${batchOps.length !== 1 ? "s" : ""}...`);
       send({ type: "commitBatch", operations: batchOps });
-    }
-
-    // Path 2: AI generate for text annotations (freeform notes)
-    if (hasTextAnnotations()) {
-      const data = serializeTextAnnotationsOnly();
-      generating = true;
-      updateGenerateButton(false);
-      showToast("Generating from annotations...");
-      send({ type: "generate", annotations: data });
-    }
-
-    // Changes exist but no ops generated (e.g., text edit without resolved filePath)
-    if (batchOps.length === 0 && !hasTextAnnotations()) {
+    } else {
       showToast("Could not resolve source files for these changes — try re-selecting");
     }
   });
@@ -315,15 +293,12 @@ function init(): void {
       // confirm/apply flow should drive the global generate/apply UI.
       if (!generating) return;
 
-      // Only reset generating if no generate is also pending
-      if (!hasTextAnnotations()) {
-        generating = false;
-        updateGenerateButton(hasChanges());
-      }
+      generating = false;
+      updateGenerateButton(hasChanges());
 
-      const successCount = (msg as any).results?.filter((r: any) => r.success).length ?? 0;
-      const totalCount = (msg as any).results?.length ?? 0;
-      const undoIds = (msg as any).undoIds ?? [];
+      const successCount = msg.results?.filter((r) => r.success).length ?? 0;
+      const totalCount = msg.results?.length ?? 0;
+      const undoIds = msg.undoIds ?? [];
 
       if (msg.success) {
         addChangeEntry({
@@ -353,42 +328,9 @@ function init(): void {
         clearAnnotationLayer();
         resetCanvas();
       } else {
-        showToast(`Error: ${(msg as any).error || "Batch apply failed"}`);
-        cooldownUntil = Date.now() + 5000;
+        showToast(`Error: ${msg.error || "Batch apply failed"}`);
         generating = false;
         updateGenerateButton(hasChanges());
-      }
-    }
-  });
-
-  // Handle generate progress + completion from CLI (text annotations only)
-  onMessage((msg) => {
-    if (msg.type === "generateProgress") {
-      showToast(msg.message);
-    }
-    if (msg.type === "generateComplete") {
-      generating = false;
-      updateGenerateButton(hasChanges());
-      if (msg.success) {
-        const fileCount = msg.changes.length;
-        addChangeEntry({
-          type: "generate",
-          componentName: "AI Generate",
-          filePath: msg.changes[0]?.filePath || "",
-          summary: `${fileCount} file${fileCount !== 1 ? "s" : ""} changed`,
-          state: "active",
-          revertData: { type: "generateUndo", undoIds: msg.undoIds || [] },
-        });
-        const summary = msg.changes
-          .map((c) => c.description || c.filePath)
-          .join(", ");
-        showToast(`Applied: ${summary}`);
-        clearSelection();
-        clearAnnotationLayer();
-        resetCanvas();
-      } else {
-        showToast(`Error: ${msg.error || "Generation failed"}`);
-        cooldownUntil = Date.now() + 5000;
       }
     }
   });
@@ -413,7 +355,7 @@ function init(): void {
     showToast("Canvas cleared");
   });
 
-  console.log("[FrameUp] Overlay initialized with Phase 2A canvas tools");
+  console.log("[ReactRewrite] Overlay initialized with Phase 2A canvas tools");
 }
 
 function close(): void {

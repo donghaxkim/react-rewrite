@@ -1,7 +1,8 @@
 // packages/overlay/src/drag.ts
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
-import type { ComponentInfo, SiblingInfo } from "@frameup/shared";
+import type { ComponentInfo, SiblingInfo } from "@react-rewrite/shared";
 import { send, onMessage } from "./bridge.js";
+import { getDebugSource } from "./tools/resolve-helper.js";
 import { addPendingReorderOperation } from "./canvas-state.js";
 import { clearSelection, setDragCallbacks } from "./selection.js";
 import { getShadowRoot, showToast } from "./toolbar.js";
@@ -128,7 +129,7 @@ function handleDragStart(e: MouseEvent, el: HTMLElement, selection: ComponentInf
     // Match siblings to DOM elements using bippy fiber walking
     const allElements = document.querySelectorAll("*");
     for (const sibEl of allElements) {
-      if (sibEl.closest("#frameup-root")) continue;
+      if (sibEl.closest("#react-rewrite-root")) continue;
       const fiber = getFiberFromHostInstance(sibEl);
       if (!fiber) continue;
 
@@ -136,7 +137,7 @@ function handleDragStart(e: MouseEvent, el: HTMLElement, selection: ComponentInf
       let current = fiber;
       while (current) {
         if (isCompositeFiber(current)) {
-          const debugSource = (current as any)._debugSource || (current as any)._debugOwner?._debugSource;
+          const debugSource = getDebugSource(current);
           if (debugSource) {
             for (const sib of msg.siblings) {
               if (

@@ -18,7 +18,7 @@
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack } from "bippy/source";
 import { resolveFrameFilePath } from "./utils/source-resolve.js";
-import type { ComponentInfo } from "@frameup/shared";
+import type { ComponentInfo } from "@react-rewrite/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { getElementsInArea } from "./utils/area-selection.js";
@@ -93,7 +93,7 @@ async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedCom
       }
     }
   } catch (err) {
-    console.warn("[FrameUp] getOwnerStack failed, falling back to fiber walk:", err);
+    console.warn("[ReactRewrite] getOwnerStack failed, falling back to fiber walk:", err);
   }
 
   // Fallback: synchronous fiber walk (works when owner stacks aren't available)
@@ -316,7 +316,7 @@ function handleMouseDown(e: MouseEvent): void {
   // Ignore clicks on the overlay's own UI (sidebar, toolbar, etc.)
   // composedPath() pierces Shadow DOM boundaries
   const path = e.composedPath();
-  if (path.some((el) => el instanceof HTMLElement && el.id === "frameup-root")) return;
+  if (path.some((el) => el instanceof HTMLElement && el.id === "react-rewrite-root")) return;
 
   const el = getCanonicalSelectableElement(e.clientX, e.clientY);
 
@@ -602,7 +602,7 @@ export async function selectElement(el: HTMLElement, options?: { skipSidebar?: b
 
     // Show selection overlay with loading dots immediately, before async resolve
     selectedElement = el;
-    showSelectionOverlay(displayRect, {} as any);
+    showSelectionOverlay(displayRect, null);
     hideHoverOverlay();
 
     const resolved = (await resolveComponentFromElement(el)) ?? buildFallbackSelection(el);
@@ -636,7 +636,7 @@ export async function selectElement(el: HTMLElement, options?: { skipSidebar?: b
       }
     }
 
-    console.log("[FrameUp] selectElement:", el.tagName, "→", resolved.componentName, resolved.filePath, "stack:", resolved.stack?.map(s => s.componentName));
+    console.log("[ReactRewrite] selectElement:", el.tagName, "→", resolved.componentName, resolved.filePath, "stack:", resolved.stack?.map(s => s.componentName));
 
     currentSelection = {
       tagName: resolved.tagName,
@@ -671,7 +671,7 @@ export async function selectElement(el: HTMLElement, options?: { skipSidebar?: b
       lineNumber: resolved.lineNumber,
     });
   } catch (err) {
-    console.error("[FrameUp] selectElement error:", err);
+    console.error("[ReactRewrite] selectElement error:", err);
   }
 }
 

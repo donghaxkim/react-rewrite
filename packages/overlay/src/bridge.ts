@@ -1,8 +1,6 @@
 // packages/overlay/src/bridge.ts
-import type { ClientMessage, ServerMessage } from "@frameup/shared";
+import type { ClientMessage, ServerMessage } from "@react-rewrite/shared";
 import { setCliTokens } from "./properties/tailwind-resolver.js";
-import { setHasApiKey } from "./config.js";
-
 type MessageHandler = (msg: ServerMessage) => void;
 
 let ws: WebSocket | null = null;
@@ -20,15 +18,6 @@ let commitResultListener: CommitResultListener | null = null;
 
 export function onCommitResult(fn: CommitResultListener): void {
   commitResultListener = fn;
-}
-
-type ApplyAllCompleteMsg = Extract<ServerMessage, { type: "applyAllComplete" }>;
-let applyAllCompleteListener: ((msg: ApplyAllCompleteMsg) => void) | null = null;
-
-export function onApplyAllComplete(
-  cb: (msg: ApplyAllCompleteMsg) => void,
-): void {
-  applyAllCompleteListener = cb;
 }
 
 export function connect(port: number): void {
@@ -55,17 +44,6 @@ export function connect(port: number): void {
       // Surface transform commit results
       if (msg.type === "updatePropertyComplete" && commitResultListener) {
         commitResultListener(msg.success, msg.errorCode, msg.error);
-      }
-      // Handle config from CLI (sent on connect)
-      if (msg.type === "config") {
-        setHasApiKey(msg.hasApiKey);
-        if (msg.hasApiKey) {
-          import("./toolbar.js").then((t) => t.hideGenerateButton());
-        }
-      }
-      // Handle apply-all completion
-      if (msg.type === "applyAllComplete" && applyAllCompleteListener) {
-        applyAllCompleteListener(msg as any);
       }
       messageHandlers.forEach((handler) => handler(msg));
     } catch {
@@ -157,12 +135,12 @@ export function manualReconnect(): void {
 export function requestFileStat(filePath: string): Promise<{ mtime: number; size: number }> {
   return new Promise((resolve) => {
     const unsub = onMessage((msg) => {
-      if ((msg as any).type === "fileStatResult" && (msg as any).filePath === filePath) {
+      if (msg.type === "fileStatResult" && msg.filePath === filePath) {
         unsub();
-        resolve({ mtime: (msg as any).mtime, size: (msg as any).size });
+        resolve({ mtime: msg.mtime, size: msg.size });
       }
     });
-    send({ type: "fileStat", filePath } as any);
+    send({ type: "fileStat", filePath });
     // Timeout after 2 seconds
     setTimeout(() => { unsub(); resolve({ mtime: 0, size: 0 }); }, 2000);
   });

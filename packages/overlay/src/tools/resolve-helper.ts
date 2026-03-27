@@ -1,7 +1,23 @@
 // packages/overlay/src/tools/resolve-helper.ts
-import type { ComponentRef } from "@frameup/shared";
+import type { ComponentRef } from "@react-rewrite/shared";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
 import { getOwnerStack } from "bippy/source";
+
+interface FiberDebugSource {
+  fileName: string;
+  lineNumber: number;
+  columnNumber?: number;
+}
+
+interface FiberWithDebugInfo {
+  _debugSource?: FiberDebugSource;
+  _debugOwner?: FiberWithDebugInfo;
+}
+
+export function getDebugSource(fiber: unknown): FiberDebugSource | undefined {
+  const f = fiber as FiberWithDebugInfo;
+  return f._debugSource ?? f._debugOwner?._debugSource;
+}
 import { resolveFrameFilePath } from "../utils/source-resolve.js";
 import { isInternalName, isLibraryPath } from "../utils/component-filter.js";
 import { getPageElementAtPoint } from "../interaction.js";
@@ -39,7 +55,7 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
           componentName: name,
           filePath,
           lineNumber: frame.lineNumber ?? 0,
-          columnNumber: (frame as any).columnNumber ?? 0,
+          columnNumber: frame.columnNumber ?? 0,
         };
         break;
       }
@@ -55,7 +71,7 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
       if (isCompositeFiber(current)) {
         const name = getDisplayName(current.type);
         if (name && name[0] === name[0].toUpperCase() && !isInternalName(name)) {
-          const debugSource = (current as any)._debugSource || (current as any)._debugOwner?._debugSource;
+          const debugSource = getDebugSource(current);
           result = {
             componentName: name,
             filePath: debugSource?.fileName || "",
@@ -112,7 +128,7 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
           componentName: name,
           filePath,
           lineNumber: frame.lineNumber ?? 0,
-          columnNumber: (frame as any).columnNumber ?? 0,
+          columnNumber: frame.columnNumber ?? 0,
         };
         break;
       }
@@ -127,7 +143,7 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
       if (isCompositeFiber(current)) {
         const name = getDisplayName(current.type);
         if (name && name[0] === name[0].toUpperCase() && !isInternalName(name)) {
-          const debugSource = (current as any)._debugSource || (current as any)._debugOwner?._debugSource;
+          const debugSource = getDebugSource(current);
           result = {
             componentName: name,
             filePath: debugSource?.fileName || "",
