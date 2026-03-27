@@ -1,75 +1,3 @@
-export type GenerateStage = "analyzing" | "generating" | "applying" | "complete" | "error";
-
-export interface FileChange {
-  filePath: string;
-  description: string;
-}
-
-export type ApplyChange =
-  | {
-      type: "property";
-      componentName: string;
-      tag: string;
-      filePath: string;
-      textContent: string;
-      className: string;
-      nthOfType: number;
-      parentTag: string;
-      parentClassName: string;
-      lineHint: number;
-      updates: Array<{
-        cssProperty: string;
-        tailwindPrefix: string;
-        tailwindToken: string | null;
-        value: string;
-        oldClass: string;
-        newClass: string;
-        relatedOldClasses: string[];
-      }>;
-    }
-  | {
-      type: "text";
-      componentName: string;
-      tag: string;
-      filePath: string;
-      className: string;
-      nthOfType: number;
-      parentTag: string;
-      parentClassName: string;
-      lineHint: number;
-      originalText: string;
-      newText: string;
-    }
-  | {
-      type: "reorder";
-      componentName: string;
-      tag: string;
-      filePath: string;
-      parentClassName: string;
-      lineHint: number;
-      childrenContext: Array<{
-        tag: string;
-        className: string;
-        textContent: string;
-      }>;
-      fromIndex: number;
-      toIndex: number;
-    }
-  | {
-      type: "move";
-      componentName: string;
-      tag: string;
-      filePath: string;
-      className: string;
-      nthOfType: number;
-      parentTag: string;
-      parentClassName: string;
-      lineHint: number;
-      delta: { dx: number; dy: number };
-      resolvedDx: string | null;
-      resolvedDy: string | null;
-    };
-
 export type BatchOperation =
   | {
       op: "updateClass";
@@ -154,7 +82,6 @@ export type ClientMessage =
   | { type: "getSiblings"; filePath: string; parentLine: number }
   | { type: "undo" }
   | { type: "ping" }
-  | { type: "generate"; annotations: SerializedAnnotations }
   | {
       type: "updateProperty";
       filePath: string;
@@ -170,6 +97,12 @@ export type ClientMessage =
       framework: "tailwind";
       classPattern?: string;
       standalone?: boolean;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      elementId?: string;
     }
   | {
       type: "updateProperties";
@@ -188,6 +121,12 @@ export type ClientMessage =
         standalone?: boolean;
       }>;
       framework: "tailwind";
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      elementId?: string;
     }
   | {
       type: "updateText";
@@ -197,10 +136,15 @@ export type ClientMessage =
       originalText: string;
       newText: string;
       cursorOffset?: number;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      elementId?: string;
     }
   | { type: "revertChanges"; undoIds: string[] }
   | { type: "discoverFile"; componentName: string }
-  | { type: "applyAllChanges"; changes: ApplyChange[] }
   | {
       type: "commitBatch";
       operations: BatchOperation[];
@@ -225,19 +169,9 @@ export type ServerMessage =
       undoId?: string;
     }
   | { type: "tailwindTokens"; tokens: TailwindTokenMap }
-  | { type: "generateProgress"; stage: GenerateStage; message: string }
-  | { type: "generateComplete"; success: boolean; changes: FileChange[]; error?: string; undoIds?: string[] }
   | { type: "updateTextComplete"; success: boolean; error?: string; reason?: string; undoId?: string }
   | { type: "revertComplete"; results: Array<{ undoId: string; success: boolean; error?: string }> }
   | { type: "discoverFileResult"; componentName: string; filePath: string | null }
-  | {
-      type: "applyAllComplete";
-      success: boolean;
-      appliedCount: number;
-      failedCount: number;
-      error?: string;
-      undoIds: string[];
-    }
   | {
       type: "commitBatchComplete";
       success: boolean;
@@ -252,8 +186,7 @@ export type ServerMessage =
       error?: string;
       undoIds: string[];
     }
-  | { type: "fileStatResult"; filePath: string; mtime: number; size: number }
-  | { type: "config"; hasApiKey: boolean };
+  | { type: "fileStatResult"; filePath: string; mtime: number; size: number };
 
 export interface ComponentInfo {
   tagName: string;
@@ -439,13 +372,12 @@ export type RevertData =
   | { type: "moveRemove"; moveId: string }
   | { type: "moveRestore"; moveId: string; previousDelta: { dx: number; dy: number } }
   | { type: "annotationRemove"; annotationId: string; originalInnerHTML: string; elementIdentity: ElementIdentity }
-  | { type: "generateUndo"; undoIds: string[] }
   | { type: "batchApplyUndo"; undoIds: string[] };
 
 export interface ChangeEntry {
   id: string;
   timestamp: number;
-  type: "property" | "move" | "textEdit" | "textAnnotation" | "generate" | "commitBatch";
+  type: "property" | "move" | "textEdit" | "textAnnotation" | "commitBatch";
   componentName: string;
   filePath: string;
   summary: string;
@@ -453,80 +385,4 @@ export interface ChangeEntry {
   propertyKey?: string;
   elementIdentity?: ElementIdentity;
   revertData: RevertData;
-}
-
-export interface SerializedAnnotations {
-  moves: Array<{
-    component: string;
-    file: string;
-    line: number;
-    originalRect: { top: number; left: number; width: number; height: number };
-    delta: { dx: number; dy: number };
-    siblingRects?: Array<{ component: string; rect: { top: number; left: number; width: number; height: number } }>;
-  }>;
-  annotations: Array<{
-    type: "text";
-    targetComponent?: string;
-    targetFile?: string;
-    targetLine?: number;
-    content?: string;
-    position?: { x: number; y: number };
-    fontSize?: number;
-    color?: string;
-  }>;
-  colorChanges: Array<{
-    component: string;
-    file: string;
-    line: number;
-    property: string;
-    from: string;
-    to: string;
-    pickedToken?: string;
-  }>;
-  textEdits: Array<{
-    component: string;
-    file: string;
-    line: number;
-    column: number;
-    originalText: string;
-    newText: string;
-    cursorOffset?: number;
-  }>;
-}
-
-export interface ResolvedValue<T> {
-  raw: T;
-  resolved: string | null;
-  resolvedValue: string | null;
-  confidence: number;
-  type: "exact" | "snapped" | "arbitrary";
-}
-
-export interface ResolvedAnnotations {
-  moves: Array<{
-    component: string;
-    file: string;
-    line: number;
-    originalRect: { top: number; left: number; width: number; height: number };
-    delta: { dx: number; dy: number };
-    resolvedDx: ResolvedValue<number> | null;
-    resolvedDy: ResolvedValue<number> | null;
-    nearestSiblings: {
-      left?: { component: string; distance: number };
-      right?: { component: string; distance: number };
-      above?: { component: string; distance: number };
-      below?: { component: string; distance: number };
-    };
-  }>;
-  annotations: SerializedAnnotations["annotations"];
-  colorChanges: Array<{
-    component: string;
-    file: string;
-    line: number;
-    property: string;
-    from: string;
-    to: string;
-    resolvedTo: ResolvedValue<string>;
-    pickedToken?: string;
-  }>;
 }
