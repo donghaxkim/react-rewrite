@@ -529,7 +529,7 @@ function applyFramerMotionMove(nodePath: any, op: Extract<BatchOperation, { op: 
     return "animate prop not found or not an expression";
   }
 
-  const expr = (animateProp as any).value.expression;
+  const expr = animateProp.value.expression;
   if (expr.type !== "ObjectExpression") {
     return "Cannot modify framer-motion animate prop (not an inline object)";
   }

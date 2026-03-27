@@ -3,6 +3,7 @@ import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bipp
 import { getOwnerStack, normalizeFileName, isSourceFile } from "bippy/source";
 import { SHADOWS } from "./design-tokens.js";
 import { setStyle } from "./utils/style-access.js";
+import { getDebugSource } from "./tools/resolve-helper.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -145,7 +146,7 @@ export function reacquireMovedElement(identity: ElementIdentity): HTMLElement | 
       let fiber = getFiberFromHostInstance(el);
       while (fiber) {
         if (isCompositeFiber(fiber)) {
-          const source = (fiber as any)._debugSource;
+          const source = getDebugSource(fiber);
           const name = getDisplayName(fiber);
           if (
             source &&
