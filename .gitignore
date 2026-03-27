@@ -1,8 +1,5 @@
 node_modules/
 dist/
-!packages/overlay/dist/
-packages/overlay/dist/*
-!packages/overlay/dist/overlay.js
 .next/
 *.tsbuildinfo
 .worktrees/
