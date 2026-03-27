@@ -300,8 +300,8 @@ function resolveNodes(
             if (astClasses.length === 0) continue;
 
             // Count overlap in both directions
-            const astInDom = astClasses.filter(c => domClasses.includes(c)).length;
-            const domInAst = domClasses.filter(c => astClasses.includes(c)).length;
+            const astInDom = astClasses.filter((c: string) => domClasses.includes(c)).length;
+            const domInAst = domClasses.filter((c: string) => astClasses.includes(c)).length;
             // Overlap = matched classes / max(ast, dom) — rewards both precision and recall
             const overlap = (astInDom + domInAst) / (astClasses.length + domClasses.length);
 
@@ -321,8 +321,8 @@ function resolveNodes(
               .filter(c => c !== bestMatch)
               .reduce((best, c) => {
                 const astClasses = getJSXStaticClasses(c.node);
-                const astInDom = astClasses.filter(cl => domClasses.includes(cl)).length;
-                const domInAst = domClasses.filter(cl => astClasses.includes(cl)).length;
+                const astInDom = astClasses.filter((cl: string) => domClasses.includes(cl)).length;
+                const domInAst = domClasses.filter((cl: string) => astClasses.includes(cl)).length;
                 const overlap = (astInDom + domInAst) / (astClasses.length + domClasses.length);
                 return overlap > best ? overlap : best;
               }, 0);
@@ -334,8 +334,8 @@ function resolveNodes(
               // Close match — use nthOfType to break tie
               const tiedCandidates = candidates.filter(c => {
                 const astClasses = getJSXStaticClasses(c.node);
-                const astInDom = astClasses.filter(cl => domClasses.includes(cl)).length;
-                const domInAst = domClasses.filter(cl => astClasses.includes(cl)).length;
+                const astInDom = astClasses.filter((cl: string) => domClasses.includes(cl)).length;
+                const domInAst = domClasses.filter((cl: string) => astClasses.includes(cl)).length;
                 const overlap = (astInDom + domInAst) / (astClasses.length + domClasses.length);
                 return overlap >= bestOverlap - 0.1;
               });

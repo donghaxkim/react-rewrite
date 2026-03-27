@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
+  BatchOperation,
   ClientMessage,
   ServerMessage,
   UndoEntry,
@@ -133,7 +134,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
                 classPattern: msg.classPattern,
                 standalone: msg.standalone,
               }]
-            : msg.updates.map((u) => ({
+            : msg.updates.map((u: typeof msg.updates[number]) => ({
                 tailwindPrefix: u.tailwindPrefix,
                 tailwindToken: u.tailwindToken,
                 value: u.value,
@@ -229,7 +230,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         }
 
         case "commitBatch": {
-          logger.debug(`[commitBatch] Received ${msg.operations.length} operations:`, msg.operations.map((o) => `${o.op}@${o.file}:${"line" in o ? o.line : o.fromLine}`));
+          logger.debug(`[commitBatch] Received ${msg.operations.length} operations:`, msg.operations.map((o: BatchOperation) => `${o.op}@${o.file}:${o.op === "reorder" ? o.fromLine : o.line}`));
           try {
             const batchResult = executeBatch(msg.operations, projectRoot);
             logger.debug(`[commitBatch] Results:`, batchResult.results.map(r => `${r.op}@${r.file}:${r.line} ${r.success ? "OK" : "FAIL: " + r.error}`));
@@ -265,10 +266,10 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
             send(ws, {
               type: "commitBatchComplete",
               success: false,
-              results: msg.operations.map((op) => ({
+              results: msg.operations.map((op: BatchOperation) => ({
                 op: op.op,
                 file: op.file,
-                line: "line" in op ? op.line : ("fromLine" in op ? op.fromLine : 0),
+                line: op.op === "reorder" ? op.fromLine : op.line,
                 success: false,
                 error: err instanceof Error ? err.message : String(err),
               })),
