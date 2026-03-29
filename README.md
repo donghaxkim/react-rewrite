@@ -1,5 +1,7 @@
 # react-rewrite
 
+https://github.com/donghaxkim/react-rewrite/releases/download/video-asset/react-rewrite.mp4
+
 `react-rewrite` lets you edit a React app visually while it is running locally, then automatically writes those changes back to the source files in your project.
 
 It is built for local development and works by opening a proxy in front of your dev server and injecting an overlay into the page.
