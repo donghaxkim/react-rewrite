@@ -18,6 +18,7 @@ import { computeSnap } from "../snap-guides.js";
 import { setSnapGuides, clearSnapGuides } from "../highlight-canvas.js";
 import { requestFileStat } from "../bridge.js";
 import { getFiberFromHostInstance } from "bippy";
+import { buildJSXPath } from "../utils/jsx-path.js";
 
 let dragEntry: MoveEntry | null = null;
 let dragStartMouse = { x: 0, y: 0 };
@@ -84,6 +85,7 @@ export function tryStartMove(clientX: number, clientY: number, el: HTMLElement):
       lineNumber: selection.lineNumber,
       columnNumber: selection.columnNumber,
       tagName: selectedEl.tagName.toLowerCase(),
+      jsxPath: selection.jsxPath,
     },
     parentLayout: captureParentLayout(selectedEl),
     nthOfType,

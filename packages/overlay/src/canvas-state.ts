@@ -585,6 +585,7 @@ export function buildBatchOperations(): BatchOperation[] {
       jsxKey: entry.jsxKey,
       fileMtime: entry.fileMtime,
       fileSize: entry.fileSize,
+      jsxPath: entry.identity?.jsxPath,
     };
 
     if (Math.abs(entry.delta.dx) >= 1) {

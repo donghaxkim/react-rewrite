@@ -13,6 +13,7 @@ import {
   type ClassNameUpdate,
 } from "./transform.js";
 import { resolveProjectFilePath, isProjectFilePathSafe } from "./path-resolver.js";
+import { resolveJSXPath } from "./jsx-path-resolver.js";
 import { logger } from "./logger.js";
 
 /** Get the primary line number from any BatchOperation variant. */
@@ -205,6 +206,21 @@ function resolveNodes(
         priority: 1, // structural
       });
       continue;
+    }
+
+    // ── Step 0: Try JSX structural path (preferred) ───────────────────
+    if ('jsxPath' in op && op.jsxPath && op.jsxPath.segments.length > 0) {
+      const pathNode = resolveJSXPath(j, root, op.jsxPath);
+      if (pathNode) {
+        // Cross-validate tag name if hint is available
+        const actualTag = getJSXTagName(pathNode.node);
+        if (!op.tagName || !actualTag || tagNameMatches(actualTag, op.tagName)) {
+          const priority = op.op === "updateClass" || op.op === "updateText" || op.op === "moveSpacing" ? 0 : 1;
+          resolved.push({ index, op, node: pathNode, priority });
+          continue;
+        }
+      }
+      // If path resolution failed, fall through to line:col + fuzzy (existing code)
     }
 
     // ── Staleness check ──────────────────────────────────────────────

@@ -467,6 +467,7 @@ function addPendingFromCurrentState(): void {
       parentClassName: parentEl?.className || undefined,
       nthOfType: computeNthOfType(el),
       id: el.id || undefined,
+      jsxPath: state.componentInfo?.jsxPath,
       updates: [...state.pendingBatch.values()].map((entry) => {
         const desc = DESCRIPTOR_MAP.get(entry.property);
         return {

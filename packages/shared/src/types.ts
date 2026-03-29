@@ -1,3 +1,36 @@
+// ---------------------------------------------------------------------------
+// JSX Structural Path — deterministic element identity
+// ---------------------------------------------------------------------------
+
+/** A single segment in a JSX structural path. */
+export interface JSXPathSegment {
+  /** Tag name (host: "div", "span") or component name (composite: "Card") */
+  name: string;
+  /** Disambiguator */
+  discriminator:
+    | { type: "key"; value: string }
+    | { type: "id"; value: string }
+    | { type: "index"; value: number }
+    | { type: "map-template" }
+    | { type: "root" };
+  /** First 3 static class names — debugging hint, NOT used for matching */
+  classHint?: string[];
+}
+
+/** Structural path to a JSX element within a single file's component. */
+export interface JSXStructuralPath {
+  /** The component function name that contains this element */
+  componentName: string;
+  /** Source file path (relative to project root) */
+  filePath: string;
+  /** Ordered segments from component render root down to target element */
+  segments: JSXPathSegment[];
+}
+
+// ---------------------------------------------------------------------------
+// Batch Operations
+// ---------------------------------------------------------------------------
+
 export type BatchOperation =
   | {
       op: "updateClass";
@@ -14,6 +47,7 @@ export type BatchOperation =
       jsxKey?: string;
       fileMtime?: number;
       fileSize?: number;
+      jsxPath?: JSXStructuralPath;
       updates: Array<{
         tailwindPrefix: string;
         tailwindToken: string | null;
@@ -38,6 +72,7 @@ export type BatchOperation =
       jsxKey?: string;
       fileMtime?: number;
       fileSize?: number;
+      jsxPath?: JSXStructuralPath;
       originalText: string;
       newText: string;
       cursorOffset?: number;
@@ -63,6 +98,7 @@ export type BatchOperation =
       jsxKey?: string;
       fileMtime?: number;
       fileSize?: number;
+      jsxPath?: JSXStructuralPath;
       axis: "x" | "y";
       token: string;
       pxDelta: number;
@@ -103,6 +139,7 @@ export type ClientMessage =
       parentClassName?: string;
       nthOfType?: number;
       elementId?: string;
+      jsxPath?: JSXStructuralPath;
     }
   | {
       type: "updateProperties";
@@ -127,6 +164,7 @@ export type ClientMessage =
       parentClassName?: string;
       nthOfType?: number;
       elementId?: string;
+      jsxPath?: JSXStructuralPath;
     }
   | {
       type: "updateText";
@@ -142,6 +180,7 @@ export type ClientMessage =
       parentClassName?: string;
       nthOfType?: number;
       elementId?: string;
+      jsxPath?: JSXStructuralPath;
     }
   | { type: "revertChanges"; undoIds: string[] }
   | { type: "discoverFile"; componentName: string }
@@ -206,6 +245,7 @@ export interface ComponentInfo {
     width: number;
     height: number;
   };
+  jsxPath?: JSXStructuralPath;
 }
 
 export interface UndoEntry {
@@ -291,6 +331,7 @@ export interface ElementIdentity {
   lineNumber: number;
   columnNumber: number;
   tagName: string;
+  jsxPath?: JSXStructuralPath;
 }
 
 export interface DetectionResult {

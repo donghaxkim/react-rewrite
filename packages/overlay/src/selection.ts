@@ -18,9 +18,10 @@
 import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumentationActive, instrument } from "bippy";
 import { getOwnerStack } from "bippy/source";
 import { resolveFrameFilePath } from "./utils/source-resolve.js";
-import type { ComponentInfo } from "@react-rewrite/shared";
+import type { ComponentInfo, JSXStructuralPath } from "@react-rewrite/shared";
 import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
 import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
+import { buildJSXPath } from "./utils/jsx-path.js";
 import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMultiSelection, isMultiSelectActive, getHandleAtPoint, getSelectionGeometry, type CornerHandle } from "./highlight-canvas.js";
@@ -48,6 +49,7 @@ type ResolvedComponent = {
   lineNumber: number;
   columnNumber: number;
   stack: Array<{ componentName: string; filePath: string; lineNumber: number; columnNumber: number }>;
+  jsxPath?: JSXStructuralPath;
 };
 
 /**
@@ -82,7 +84,7 @@ async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedCom
       if (stack.length > 0) {
         // Prefer the first frame with a resolved file path (skip library wrappers)
         const primary = stack.find(f => f.filePath) || stack[0];
-        return {
+        const result: ResolvedComponent = {
           tagName: el.tagName.toLowerCase(),
           componentName: primary.componentName,
           filePath: primary.filePath,
@@ -90,6 +92,8 @@ async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedCom
           columnNumber: primary.columnNumber,
           stack,
         };
+        result.jsxPath = buildJSXPath(el, primary.filePath, primary.componentName) ?? undefined;
+        return result;
       }
     }
   } catch (err) {
@@ -129,7 +133,7 @@ function resolveComponentFromFiberWalk(el: HTMLElement, fiber: any): ResolvedCom
 
   if (stack.length === 0) return null;
 
-  return {
+  const result: ResolvedComponent = {
     tagName: el.tagName.toLowerCase(),
     componentName: stack[0].componentName,
     filePath: stack[0].filePath,
@@ -137,6 +141,8 @@ function resolveComponentFromFiberWalk(el: HTMLElement, fiber: any): ResolvedCom
     columnNumber: stack[0].columnNumber,
     stack,
   };
+  result.jsxPath = buildJSXPath(el, stack[0].filePath, stack[0].componentName) ?? undefined;
+  return result;
 }
 
 /** Synchronous-only resolve for hover labels and marquee (fast path) */
@@ -651,6 +657,7 @@ export async function selectElement(el: HTMLElement, options?: { skipSidebar?: b
         width: displayRect.width,
         height: displayRect.height,
       },
+      jsxPath: resolved.jsxPath,
     };
 
     if (selectionLabel) {
