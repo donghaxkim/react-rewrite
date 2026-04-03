@@ -8,7 +8,7 @@ const fixturesDir = path.join(__dirname, "fixtures");
 
 /** Write a temp fixture and return helpers. */
 function writeFixture(name: string, content: string) {
-  const tmp = path.join(fixturesDir, `_tmp_${Date.now()}_${name}`);
+  const tmp = path.join(fixturesDir, `_tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${name}`);
   fs.writeFileSync(tmp, content, "utf-8");
   return {
     filePath: tmp,

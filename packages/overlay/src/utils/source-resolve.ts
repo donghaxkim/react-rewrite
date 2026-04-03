@@ -108,7 +108,7 @@ export function resolveFrameFilePath(rawFileName: string | undefined | null): st
   // Reject paths that are clearly library/external code
   if (
     extracted &&
-    /\.(tsx?|jsx?|mjs)$/.test(extracted) &&
+    /\.(tsx?|jsx?|mjs|mdx?)$/.test(extracted) &&
     !extracted.includes("node_modules") &&
     !extracted.startsWith("../") &&            // traverses outside project
     !extracted.includes("/dist/") &&           // built library output

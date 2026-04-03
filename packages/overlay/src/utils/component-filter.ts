@@ -40,6 +40,11 @@ export function isInternalName(name: string): boolean {
   return false;
 }
 
+export function isMdxFilePath(filePath: string): boolean {
+  if (!filePath) return false;
+  return filePath.endsWith(".mdx") || filePath.endsWith(".md");
+}
+
 /**
  * Check if a resolved file path points to library code (not user source).
  * Used as an additional filter when isInternalName doesn't catch a wrapper component.

@@ -29,6 +29,28 @@ interface SketchServer {
   getActiveClient: () => WebSocket | null;
 }
 
+export function attachUndoIdsToBatchResults(
+  results: Array<{ op: BatchOperation["op"]; file: string; line: number; success: boolean; error?: string }>,
+  undoEntries: Array<{ filePath: string; content: string; afterContent: string }>,
+  undoIds: string[],
+  projectRoot: string,
+) {
+  const undoIdByFile = new Map<string, string>();
+  undoEntries.forEach((entry, index) => {
+    const resolved = path.resolve(projectRoot, entry.filePath);
+    const undoId = undoIds[index];
+    if (undoId) undoIdByFile.set(resolved, undoId);
+  });
+
+  return results.map((result) => {
+    const resolvedResultPath = path.resolve(projectRoot, result.file);
+    return {
+      ...result,
+      undoId: result.success ? undoIdByFile.get(resolvedResultPath) : undefined,
+    };
+  });
+}
+
 export function createSketchServer(portOrOptions: number | SketchServerOptions): SketchServer {
   const port = typeof portOrOptions === "number" ? portOrOptions : portOrOptions.port;
   const wss = new WebSocketServer({ port });
@@ -208,6 +230,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               jsxPath: msg.jsxPath,
               originalText: msg.originalText,
               newText: msg.newText,
+              textAnchor: msg.textAnchor,
             }],
             projectRoot,
           );
@@ -232,10 +255,18 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         }
 
         case "commitBatch": {
-          logger.debug(`[commitBatch] Received ${msg.operations.length} operations:`, msg.operations.map((o: BatchOperation) => `${o.op}@${o.file}:${o.op === "reorder" ? o.fromLine : o.line}`));
+          logger.info(`[commitBatch] Received ${msg.operations.length} operations:`, msg.operations.map((o: BatchOperation) => `${o.op}@${o.file}:${o.op === "reorder" ? o.fromLine : o.line}`));
           try {
             const batchResult = executeBatch(msg.operations, projectRoot);
-            logger.debug(`[commitBatch] Results:`, batchResult.results.map(r => `${r.op}@${r.file}:${r.line} ${r.success ? "OK" : "FAIL: " + r.error}`));
+            const failedOps = batchResult.results.filter(r => !r.success);
+            if (failedOps.length > 0) {
+              logger.error(`[commitBatch] ${failedOps.length}/${batchResult.results.length} operations failed:`);
+              for (const r of failedOps) {
+                logger.error(`  ${r.op}@${r.file}:${r.line} — ${r.error}`);
+              }
+            } else {
+              logger.info(`[commitBatch] All ${batchResult.results.length} operations succeeded`);
+            }
 
             // Create undo entries for each file that was modified
             const batchUndoIds: string[] = [];
@@ -252,10 +283,12 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
             }
 
             // Map undo IDs to per-op results
-            const resultsWithUndo = batchResult.results.map(r => ({
-              ...r,
-              undoId: r.success ? batchUndoIds[0] : undefined, // simplified — all ops share file-level undo
-            }));
+            const resultsWithUndo = attachUndoIdsToBatchResults(
+              batchResult.results,
+              batchResult.undoEntries,
+              batchUndoIds,
+              projectRoot,
+            );
 
             const allSuccess = batchResult.results.every(r => r.success);
             send(ws, {
@@ -265,6 +298,7 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
               undoIds: batchUndoIds,
             });
           } catch (err) {
+            logger.error(`[commitBatch] Exception:`, err instanceof Error ? err.message : String(err));
             send(ws, {
               type: "commitBatchComplete",
               success: false,

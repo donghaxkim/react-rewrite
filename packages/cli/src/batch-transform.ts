@@ -3,6 +3,7 @@
 // the original AST, applies all mutations atomically (parse once, write once).
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { BatchOperation } from "@react-rewrite/shared";
 import {
   parseSource,
@@ -12,9 +13,61 @@ import {
   mutateReorder,
   type ClassNameUpdate,
 } from "./transform.js";
+import { applyMdxTextEdit, isMdxTextFile } from "./mdx-text.js";
 import { resolveProjectFilePath, isProjectFilePathSafe } from "./path-resolver.js";
 import { resolveJSXPath } from "./jsx-path-resolver.js";
 import { logger } from "./logger.js";
+
+/**
+ * Search for .mdx/.md files in the project that contain the given text.
+ * Used as a fallback when a text edit targets a JSX wrapper but the actual
+ * content lives in a compiled MDX file.
+ */
+function findMdxFileContainingText(projectRoot: string, text: string): string | null {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
+  if (!normalizedText) return null;
+
+  const candidates: string[] = [];
+  const searchDirs = [projectRoot];
+  const visited = new Set<string>();
+
+  while (searchDirs.length > 0) {
+    const dir = searchDirs.pop()!;
+    if (visited.has(dir)) continue;
+    visited.add(dir);
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "dist" || entry.name === "build") continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        searchDirs.push(fullPath);
+      } else if (entry.name.endsWith(".mdx") || entry.name.endsWith(".md")) {
+        candidates.push(fullPath);
+      }
+    }
+  }
+
+  for (const filePath of candidates) {
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const normalizedContent = content.replace(/\s+/g, " ");
+      if (normalizedContent.includes(normalizedText)) {
+        return filePath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
 
 /** Get the primary line number from any BatchOperation variant. */
 function getOpLine(op: BatchOperation): number {
@@ -372,6 +425,16 @@ function resolveNodes(
       }
     }
 
+    if (!node && op.op === "updateText") {
+      resolved.push({
+        index,
+        op,
+        node: null,
+        priority: 0,
+      });
+      continue;
+    }
+
     if (!node) {
       resolved.push({
         index,
@@ -403,8 +466,8 @@ function coalesceOps(resolved: ResolvedOp[]): ResolvedOp[] {
       // Failed resolution — keep as-is
       continue;
     }
-    if (rop.op.op === "reorder") {
-      // Reorder can't be coalesced
+    if (rop.op.op === "reorder" || rop.op.op === "deleteElement") {
+      // Structural ops can't be coalesced
       continue;
     }
     const key = `${rop.op.line}:${rop.op.col}`;
@@ -454,11 +517,26 @@ function applyOp(j: any, root: any, rop: ResolvedOp, source: string): string | u
     }
 
     case "updateText": {
-      const found = mutateTextContent(node, op.originalText, op.newText, source, op.cursorOffset);
-      if (!found) {
-        return `No matching text "${op.originalText}" found in element at ${op.line}:${op.col}`;
+      if (node) {
+        const boundFallback = replaceBoundStringLiteralInElement(j, root, node, op.originalText, op.newText);
+        if (boundFallback) {
+          return undefined;
+        }
+
+        const found = mutateTextContent(node, op.originalText, op.newText, source, op.cursorOffset, op.textAnchor);
+        if (found) {
+          return undefined;
+        }
       }
-      return undefined;
+
+      const fallback = replaceStringLiteralInFile(j, root, op.originalText, op.newText);
+      if (fallback.replaced) {
+        return undefined;
+      }
+      if (fallback.ambiguous) {
+        return `Text "${op.originalText}" matched multiple string literals in this file; refusing ambiguous rewrite`;
+      }
+      return `No matching text "${op.originalText}" found in element at ${op.line}:${op.col}`;
     }
 
     case "reorder": {
@@ -509,11 +587,294 @@ function applyOp(j: any, root: any, rop: ResolvedOp, source: string): string | u
       return undefined;
     }
 
+    case "duplicateElement": {
+      // Handled in Phase 0 of executeBatch (source-level splice).
+      return undefined;
+    }
+
+    case "deleteElement": {
+      // Use jscodeshift's path-based removal — handles all parent types
+      // (JSXElement children, return statements, variable declarations, etc.)
+      // and correctly updates internal AST references.
+      try {
+        // For JSX children, we need to also remove surrounding whitespace JSXText nodes
+        const parent = node.parent;
+        if (parent?.node?.children) {
+          const children = parent.node.children;
+          const idx = children.indexOf(node.node);
+          if (idx >= 0) {
+            // Remove trailing whitespace JSXText if it exists
+            if (idx + 1 < children.length && children[idx + 1]?.type === "JSXText" &&
+                children[idx + 1].value.trim() === "") {
+              children.splice(idx, 2);
+            }
+            // Or remove leading whitespace JSXText
+            else if (idx > 0 && children[idx - 1]?.type === "JSXText" &&
+                     children[idx - 1].value.trim() === "") {
+              children.splice(idx - 1, 2);
+            }
+            else {
+              children.splice(idx, 1);
+            }
+            return undefined;
+          }
+        }
+        // Fallback: use jscodeshift's prune (handles non-JSX-children cases)
+        node.prune();
+        return undefined;
+      } catch (err) {
+        return `Failed to remove element: ${err instanceof Error ? err.message : String(err)}`;
+      }
+    }
+
     default: {
       const _exhaustive: never = op;
       return `Unknown operation type: ${_exhaustive}`;
     }
   }
+}
+
+// ── String literal fallback for text edits ──────────────────────────────
+
+/**
+ * Fallback for text edits where the text lives in a JS string literal
+ * (e.g. `description: "some text"`) rather than inline JSX.
+ * Searches all StringLiteral/Literal nodes in the file for an exact match.
+ */
+function replaceStringLiteralInFile(
+  j: any,
+  root: any,
+  originalText: string,
+  newText: string,
+): { replaced: boolean; ambiguous: boolean } {
+  const trimmedOriginal = originalText.trim();
+  if (!trimmedOriginal) return { replaced: false, ambiguous: false };
+
+  const literalMatches: Array<{ apply: () => void }> = [];
+
+  // Search StringLiteral nodes (babel parser)
+  root.find(j.StringLiteral).forEach((p: any) => {
+    if (p.node.value === trimmedOriginal) {
+      literalMatches.push({
+        apply: () => {
+          p.node.value = newText.trim();
+        },
+      });
+    }
+  });
+
+  // Search Literal nodes (typescript/flow parser)
+  try {
+    root.find(j.Literal).forEach((p: any) => {
+      if (typeof p.node.value === "string" && p.node.value === trimmedOriginal) {
+        literalMatches.push({
+          apply: () => {
+            p.node.value = newText.trim();
+          },
+        });
+      }
+    });
+  } catch {
+    // j.Literal may not exist in all parsers
+  }
+
+  // Search TemplateLiteral quasis for the text as a substring
+  root.find(j.TemplateLiteral).forEach((p: any) => {
+    for (const quasi of p.node.quasis ?? []) {
+      if ((p.node.expressions?.length ?? 0) === 0 && quasi.value?.raw === trimmedOriginal) {
+        literalMatches.push({
+          apply: () => {
+            quasi.value.raw = newText.trim();
+            quasi.value.cooked = newText.trim();
+          },
+        });
+      }
+    }
+  });
+
+  if (literalMatches.length === 0) return { replaced: false, ambiguous: false };
+  if (literalMatches.length > 1) return { replaced: false, ambiguous: true };
+  literalMatches[0].apply();
+  return { replaced: true, ambiguous: false };
+}
+
+function collapseVisibleWhitespace(value: string): string {
+  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ");
+}
+
+function getStaticRenderableText(node: any): string | null {
+  if (!node) return "";
+  if (node.type === "JSXText") return collapseVisibleWhitespace(node.value ?? "");
+  if (node.type === "JSXElement") {
+    const parts: string[] = [];
+    for (const child of node.children ?? []) {
+      const text = getStaticRenderableText(child);
+      if (text == null) return null;
+      parts.push(text);
+    }
+    return collapseVisibleWhitespace(parts.join(""));
+  }
+  if (node.type === "JSXExpressionContainer") {
+    const expr = node.expression;
+    if (expr?.type === "StringLiteral" || expr?.type === "Literal") {
+      return collapseVisibleWhitespace(String(expr.value ?? ""));
+    }
+    return null;
+  }
+  return "";
+}
+
+function readStringLiteralValue(node: any): string | null {
+  if (!node) return null;
+  if (node.type === "StringLiteral" || node.type === "Literal") {
+    return typeof node.value === "string" ? node.value : null;
+  }
+  if (node.type === "TemplateLiteral" && (node.expressions?.length ?? 0) === 0) {
+    return node.quasis?.[0]?.value?.cooked ?? node.quasis?.[0]?.value?.raw ?? "";
+  }
+  return null;
+}
+
+function writeStringLiteralValue(node: any, value: string): boolean {
+  if (!node) return false;
+  if (node.type === "StringLiteral" || node.type === "Literal") {
+    node.value = value;
+    return true;
+  }
+  if (node.type === "TemplateLiteral" && (node.expressions?.length ?? 0) === 0 && node.quasis?.length === 1) {
+    node.quasis[0].value.raw = value;
+    node.quasis[0].value.cooked = value;
+    return true;
+  }
+  return false;
+}
+
+function getObjectPropertyValueNode(objectExpression: any, propertyName: string): any | null {
+  for (const property of objectExpression?.properties ?? []) {
+    if (property?.type !== "Property" && property?.type !== "ObjectProperty") continue;
+    const keyName =
+      property.key?.type === "Identifier"
+        ? property.key.name
+        : property.key?.type === "StringLiteral" || property.key?.type === "Literal"
+          ? String(property.key.value ?? "")
+          : null;
+    if (keyName === propertyName) {
+      return property.value ?? null;
+    }
+  }
+  return null;
+}
+
+function resolveVariableDeclaratorByName(j: any, root: any, name: string): any | null {
+  const matches = root.find(j.VariableDeclarator, {
+    id: { type: "Identifier", name },
+  }).paths();
+  if (matches.length !== 1) return null;
+  return matches[0];
+}
+
+function findEnclosingMapCollectionExpression(elementPath: any, paramName: string): any | null {
+  let current = elementPath;
+  while (current) {
+    const node = current.node;
+    if ((node?.type === "ArrowFunctionExpression" || node?.type === "FunctionExpression")) {
+      const firstParam = node.params?.[0];
+      if (firstParam?.type === "Identifier" && firstParam.name === paramName) {
+        const callNode = current.parent?.node;
+        if (
+          callNode?.type === "CallExpression" &&
+          callNode.callee?.type === "MemberExpression" &&
+          !callNode.callee.computed &&
+          callNode.callee.property?.type === "Identifier" &&
+          callNode.callee.property.name === "map"
+        ) {
+          return callNode.callee.object;
+        }
+      }
+    }
+    current = current.parent;
+  }
+  return null;
+}
+
+function resolveExpressionLiteralCandidates(j: any, root: any, elementPath: any, expression: any): any[] {
+  if (!expression) return [];
+
+  if (expression.type === "Identifier") {
+    const declarator = resolveVariableDeclaratorByName(j, root, expression.name);
+    const valueNode = declarator?.node?.init;
+    return readStringLiteralValue(valueNode) != null ? [valueNode] : [];
+  }
+
+  if (
+    expression.type === "MemberExpression" &&
+    !expression.computed &&
+    expression.object?.type === "Identifier" &&
+    expression.property?.type === "Identifier"
+  ) {
+    const objectName = expression.object.name;
+    const propertyName = expression.property.name;
+
+    const directObjectDeclarator = resolveVariableDeclaratorByName(j, root, objectName);
+    const directObjectValue = getObjectPropertyValueNode(directObjectDeclarator?.node?.init, propertyName);
+    if (readStringLiteralValue(directObjectValue) != null) {
+      return [directObjectValue];
+    }
+
+    const collectionExpression = findEnclosingMapCollectionExpression(elementPath, objectName);
+    if (collectionExpression?.type === "Identifier") {
+      const collectionDeclarator = resolveVariableDeclaratorByName(j, root, collectionExpression.name);
+      const arrayExpression = collectionDeclarator?.node?.init;
+      if (arrayExpression?.type === "ArrayExpression") {
+        return (arrayExpression.elements ?? [])
+          .map((element: any) => getObjectPropertyValueNode(element, propertyName))
+          .filter((node: any) => readStringLiteralValue(node) != null);
+      }
+    }
+  }
+
+  return [];
+}
+
+function replaceBoundStringLiteralInElement(
+  j: any,
+  root: any,
+  elementPath: any,
+  originalText: string,
+  newText: string,
+): boolean {
+  const children = elementPath.node.children ?? [];
+  if (children.length === 0) return false;
+
+  for (let index = 0; index < children.length; index++) {
+    const child = children[index];
+    if (child?.type !== "JSXExpressionContainer") continue;
+
+    const candidates = resolveExpressionLiteralCandidates(j, root, elementPath, child.expression);
+    if (candidates.length === 0) continue;
+
+    const prefixParts = children.slice(0, index).map(getStaticRenderableText);
+    const suffixParts = children.slice(index + 1).map(getStaticRenderableText);
+    if ([...prefixParts, ...suffixParts].some((part) => part == null)) continue;
+
+    const prefix = collapseVisibleWhitespace(prefixParts.join(""));
+    const suffix = collapseVisibleWhitespace(suffixParts.join(""));
+
+    const matchingCandidates = candidates.filter((candidateNode) => {
+      const value = readStringLiteralValue(candidateNode);
+      return value != null && collapseVisibleWhitespace(`${prefix}${value}${suffix}`) === collapseVisibleWhitespace(originalText);
+    });
+
+    if (matchingCandidates.length !== 1) continue;
+    if (!collapseVisibleWhitespace(newText).startsWith(prefix) || !collapseVisibleWhitespace(newText).endsWith(suffix)) continue;
+
+    const rawNewValue = newText.slice(prefix.length, newText.length - suffix.length);
+    if (writeStringLiteralValue(matchingCandidates[0], rawNewValue)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // ── Tailwind spacing scale helpers ──────────────────────────────────────
@@ -718,6 +1079,186 @@ function applyFramerMotionMove(nodePath: any, op: Extract<BatchOperation, { op: 
 
 // ── Main entry point ─────────────────────────────────────────────────────
 
+// ── Duplicate element helpers ───────────────────────────────────────────
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getLiteralAttributeValue(attrValue: any): string | null {
+  if (!attrValue) return null;
+  if (attrValue.type === "StringLiteral" || attrValue.type === "Literal") {
+    return typeof attrValue.value === "string" ? attrValue.value : null;
+  }
+  return null;
+}
+
+function getDuplicateParentIdentity(nodePath: any): string {
+  const parent = nodePath.parent?.node;
+  const parentStart = parent?.start ?? "root";
+  const parentEnd = parent?.end ?? "root";
+  return `${parentStart}:${parentEnd}`;
+}
+
+function collectSiblingLiteralKeys(nodePath: any): Set<string> {
+  const keys = new Set<string>();
+  const parentChildren = nodePath.parent?.node?.children;
+  if (!Array.isArray(parentChildren)) return keys;
+
+  for (const sibling of parentChildren) {
+    if (sibling?.type !== "JSXElement") continue;
+    const keyAttr = (sibling.openingElement?.attributes ?? []).find(
+      (a: any) => a.type === "JSXAttribute" && a.name?.name === "key"
+    );
+    const keyValue = getLiteralAttributeValue(keyAttr?.value);
+    if (keyValue) keys.add(keyValue);
+  }
+  return keys;
+}
+
+function pickUniqueDuplicateKey(originalKey: string, usedKeys: Set<string>): string {
+  let candidate = `${originalKey}-copy`;
+  let suffix = 2;
+  while (usedKeys.has(candidate)) {
+    candidate = `${originalKey}-copy-${suffix}`;
+    suffix++;
+  }
+  usedKeys.add(candidate);
+  return candidate;
+}
+
+function deduplicateKey(
+  jsxText: string,
+  nodePath: any,
+  reservedKeysByParent: Map<string, Set<string>>,
+): string {
+  const attrs = nodePath.node.openingElement?.attributes ?? [];
+  const keyAttr = attrs.find(
+    (a: any) => a.type === "JSXAttribute" && a.name?.name === "key"
+  );
+  if (!keyAttr?.value) return jsxText;
+  const originalKey = getLiteralAttributeValue(keyAttr.value);
+  if (!originalKey) return jsxText;
+
+  const parentIdentity = getDuplicateParentIdentity(nodePath);
+  let usedKeys = reservedKeysByParent.get(parentIdentity);
+  if (!usedKeys) {
+    usedKeys = collectSiblingLiteralKeys(nodePath);
+    reservedKeysByParent.set(parentIdentity, usedKeys);
+  }
+
+  const newKey = pickUniqueDuplicateKey(originalKey, usedKeys);
+  return jsxText.replace(
+    new RegExp(`key=(["'])${escapeRegex(originalKey)}\\1`),
+    (_match, quote: string) => `key=${quote}${newKey}${quote}`,
+  );
+}
+
+function getTextLikeNodeValue(node: any): string {
+  if (!node) return "";
+  if (node.type === "JSXText") return node.value ?? "";
+  if (node.type === "JSXExpressionContainer") {
+    const value = getLiteralAttributeValue(node.expression);
+    return value ?? "";
+  }
+  return "";
+}
+
+function getLeadingInlineSeparator(text: string): string {
+  if (!text) return "";
+  const trimmedLeadingWhitespace = text.match(/^[\t\n\f\r ]+/)?.[0] ?? "";
+  const remainder = text.slice(trimmedLeadingWhitespace.length);
+  if (!remainder) return trimmedLeadingWhitespace;
+
+  const punctuationMatch = remainder.match(/^(?:[,;:/|]\s*)+/)?.[0] ?? "";
+  if (punctuationMatch) {
+    return trimmedLeadingWhitespace + punctuationMatch;
+  }
+
+  return trimmedLeadingWhitespace;
+}
+
+function getTrailingInlineSeparator(text: string): string {
+  if (!text) return "";
+  const trailingWhitespace = text.match(/[\t\n\f\r ]+$/)?.[0] ?? "";
+  const prefix = text.slice(0, text.length - trailingWhitespace.length);
+  const punctuationMatch = prefix.match(/(?:[,;:/|]\s*)+$/)?.[0] ?? "";
+  if (punctuationMatch) {
+    return punctuationMatch + trailingWhitespace;
+  }
+  return trailingWhitespace;
+}
+
+function extractInlineDuplicateSeparator(source: string, nodePath: any): string {
+  const parentChildren = nodePath.parent?.node?.children;
+  if (!Array.isArray(parentChildren)) return "";
+
+  const nodeIndex = parentChildren.indexOf(nodePath.node);
+  if (nodeIndex === -1) return "";
+
+  const nextSibling = parentChildren[nodeIndex + 1];
+  if (nextSibling) {
+    const between = source.slice(nodePath.node.end ?? 0, nextSibling.start ?? nodePath.node.end ?? 0);
+    if (between.length > 0) {
+      return between;
+    }
+
+    const nextValue = getTextLikeNodeValue(nextSibling);
+    const nextSeparator = getLeadingInlineSeparator(nextValue);
+    if (nextSeparator) return nextSeparator;
+  }
+
+  const previousSibling = parentChildren[nodeIndex - 1];
+  if (previousSibling) {
+    const between = source.slice(previousSibling.end ?? nodePath.node.start ?? 0, nodePath.node.start ?? 0);
+    if (between.length > 0) {
+      return between;
+    }
+
+    const previousValue = getTextLikeNodeValue(previousSibling);
+    return getTrailingInlineSeparator(previousValue);
+  }
+
+  return "";
+}
+
+interface SourceSplice {
+  offset: number;
+  insert: string;
+}
+
+function buildDuplicateSplice(
+  source: string,
+  nodePath: any,
+  reservedKeysByParent: Map<string, Set<string>>,
+): SourceSplice | null {
+  const node = nodePath.node;
+  const start = node.start;
+  const end = node.end;
+  if (start == null || end == null) return null;
+  const subtreeText = source.slice(start, end);
+  const processedText = deduplicateKey(subtreeText, nodePath, reservedKeysByParent);
+
+  // Determine if this is an inline child (e.g. <a> inside <p>) or a block-level sibling.
+  // Check if the element is on its own line: if the text between the previous newline
+  // and the element start is only whitespace, it's block-level and gets newline+indent.
+  // Otherwise it's inline and gets inserted with the same separator that follows it.
+  const lineStart = source.lastIndexOf("\n", start) + 1;
+  const textBeforeOnLine = source.slice(lineStart, start);
+  const isBlockLevel = textBeforeOnLine.trim() === "";
+
+  if (isBlockLevel) {
+    const indent = textBeforeOnLine;
+    return { offset: end, insert: "\n" + indent + processedText };
+  }
+
+  // Inline element — reuse the separator that currently follows the element
+  // so duplicates preserve punctuation and spacing within prose.
+  const separator = extractInlineDuplicateSeparator(source, nodePath);
+
+  return { offset: end, insert: separator + processedText };
+}
+
 export function executeBatch(
   operations: BatchOperation[],
   projectRoot: string,
@@ -783,10 +1324,152 @@ export function executeBatch(
     }
 
     const beforeContent = source;
+
+    if (isMdxTextFile(resolvedPath)) {
+      logger.info(`[MDX] Processing MDX file: ${resolvedPath}`);
+      let currentSource = source;
+      let fileHasChanges = false;
+
+      for (const { index, op } of ops) {
+        const line = getOpLine(op);
+
+        if (op.op !== "updateText") {
+          results[index] = {
+            op: op.op,
+            file,
+            line,
+            success: false,
+            error: `Operation "${op.op}" is not supported for markdown/MDX files`,
+          };
+          continue;
+        }
+
+        try {
+          const result = applyMdxTextEdit(
+            currentSource,
+            op.line,
+            op.col,
+            op.originalText,
+            op.newText,
+            op.cursorOffset,
+            op.textAnchor,
+          );
+
+          logger.info(`[MDX] applyMdxTextEdit result: changed=${result.changed}, error=${result.error || "none"}, originalText="${op.originalText?.slice(0, 40)}", newText="${op.newText?.slice(0, 40)}"`);
+
+          if (result.error) {
+            results[index] = {
+              op: op.op,
+              file,
+              line,
+              success: false,
+              error: result.error,
+            };
+            continue;
+          }
+
+          currentSource = result.source;
+          fileHasChanges = fileHasChanges || result.changed;
+          results[index] = {
+            op: op.op,
+            file,
+            line,
+            success: result.changed,
+            error: result.changed ? undefined : "Text matched but no change produced",
+          };
+        } catch (err) {
+          results[index] = {
+            op: op.op,
+            file,
+            line,
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+
+      if (fileHasChanges) {
+        try {
+          fs.writeFileSync(resolvedPath, currentSource, "utf-8");
+          undoEntries.push({ filePath: resolvedPath, content: beforeContent, afterContent: currentSource });
+        } catch (err) {
+          for (const { index, op } of ops) {
+            results[index] = {
+              op: op.op,
+              file,
+              line: getOpLine(op),
+              success: false,
+              error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
+            };
+          }
+        }
+      }
+
+      continue;
+    }
+
+    // Phase 0: Apply duplicateElement splices BEFORE parsing for other ops.
+    const duplicateOps = ops.filter(o => o.op.op === "duplicateElement");
+    const nonDuplicateOps = ops.filter(o => o.op.op !== "duplicateElement");
+
+    if (duplicateOps.length > 0) {
+      const { j: jDup, root: rootDup } = parseSource(source, resolvedPath);
+      const splices: SourceSplice[] = [];
+      const reservedKeysByParent = new Map<string, Set<string>>();
+
+      for (const { index, op } of duplicateOps) {
+        const line = getOpLine(op);
+        const tempResolved = resolveNodes(jDup, rootDup, [{ index, op }], resolvedPath);
+        const rop = tempResolved[0];
+        if (!rop || rop.error || !rop.node) {
+          results[index] = {
+            op: op.op, file, line,
+            success: false,
+            error: rop?.error ?? "Could not resolve element for duplication",
+          };
+          continue;
+        }
+        const splice = buildDuplicateSplice(source, rop.node, reservedKeysByParent);
+        if (!splice) {
+          results[index] = {
+            op: op.op, file, line,
+            success: false,
+            error: "Could not extract source range for duplication",
+          };
+          continue;
+        }
+        splices.push(splice);
+        results[index] = { op: op.op, file, line, success: true };
+      }
+
+      splices.sort((a, b) => b.offset - a.offset);
+      for (const splice of splices) {
+        source = source.slice(0, splice.offset) + splice.insert + source.slice(splice.offset);
+      }
+
+      if (nonDuplicateOps.length === 0) {
+        if (splices.length > 0) {
+          try {
+            fs.writeFileSync(resolvedPath, source, "utf-8");
+            undoEntries.push({ filePath: resolvedPath, content: beforeContent, afterContent: source });
+          } catch (err) {
+            for (const { index, op } of duplicateOps) {
+              results[index] = {
+                op: op.op, file, line: getOpLine(op),
+                success: false,
+                error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
+              };
+            }
+          }
+        }
+        continue;
+      }
+    }
+
     const { j, root, quoteStyle } = parseSource(source, resolvedPath);
 
-    // Phase 1: Resolve all nodes against the ORIGINAL AST
-    const resolved = resolveNodes(j, root, ops, resolvedPath);
+    // Phase 1: Resolve all nodes against the (potentially modified) AST
+    const resolved = resolveNodes(j, root, nonDuplicateOps.length > 0 ? nonDuplicateOps : ops, resolvedPath);
 
     // Phase 2: Coalesce same-node operations
     const coalesced = coalesceOps(resolved);
@@ -864,6 +1547,65 @@ export function executeBatch(
             success: false,
             error: `Failed to write file: ${err instanceof Error ? err.message : String(err)}`,
           };
+        }
+      }
+    }
+  }
+
+  // ── MDX fallback: redirect text edits that targeted JSX wrappers ──────
+  // When MDX content is compiled and imported by a JSX file, the overlay
+  // resolves to the JSX wrapper (e.g., BlogPost.jsx) instead of the .mdx
+  // source. Detect this and retry against the actual MDX file.
+  for (let i = 0; i < operations.length; i++) {
+    const op = operations[i];
+    if (op.op !== "updateText") continue;
+
+    const resolvedPath = resolveProjectFilePath(op.file, projectRoot);
+    if (!resolvedPath || isMdxTextFile(resolvedPath)) continue; // already handled by MDX path
+
+    // Check if the JSX transform actually modified the right text, or if
+    // it matched a coincidental string literal in the wrapper file
+    const currentContent = (() => { try { return fs.readFileSync(resolvedPath, "utf-8"); } catch { return null; } })();
+    if (!currentContent) continue;
+
+    // If the original text doesn't appear in the JSX source, the JSX transform
+    // matched something it shouldn't have — revert and try MDX
+    const originalTextNormalized = op.originalText.replace(/\s+/g, " ").trim();
+    const sourceHasText = currentContent.replace(/\s+/g, " ").includes(originalTextNormalized);
+
+    // Also check: if the result was a failure, try MDX fallback
+    const resultFailed = !results[i]?.success;
+
+    if (resultFailed || !sourceHasText) {
+      const mdxFile = findMdxFileContainingText(projectRoot, op.originalText);
+      if (mdxFile) {
+        logger.info(`[MDX fallback] Redirecting text edit from ${op.file} → ${mdxFile}`);
+        try {
+          const mdxSource = fs.readFileSync(mdxFile, "utf-8");
+          const mdxBefore = mdxSource;
+          const mdxResult = applyMdxTextEdit(
+            mdxSource,
+            op.line,
+            op.col,
+            op.originalText,
+            op.newText,
+            op.cursorOffset,
+            op.textAnchor,
+          );
+
+          logger.info(`[MDX fallback] result: changed=${mdxResult.changed}, error=${mdxResult.error || "none"}`);
+
+          if (mdxResult.error) {
+            results[i] = { op: op.op, file: mdxFile, line: op.line, success: false, error: mdxResult.error };
+          } else if (mdxResult.changed) {
+            fs.writeFileSync(mdxFile, mdxResult.source, "utf-8");
+            undoEntries.push({ filePath: mdxFile, content: mdxBefore, afterContent: mdxResult.source });
+            results[i] = { op: op.op, file: mdxFile, line: op.line, success: true };
+          } else {
+            results[i] = { op: op.op, file: mdxFile, line: op.line, success: false, error: "Text found in MDX but no change produced" };
+          }
+        } catch (err) {
+          results[i] = { op: op.op, file: mdxFile, line: op.line, success: false, error: err instanceof Error ? err.message : String(err) };
         }
       }
     }

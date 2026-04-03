@@ -1,4 +1,4 @@
-import type { ServerMessage, ComponentInfo, ElementIdentity, TextEditAnnotation } from "@react-rewrite/shared";
+import type { ServerMessage, ComponentInfo, ElementIdentity, TextEditAnchor, TextEditAnnotation } from "@react-rewrite/shared";
 import { getFiberFromHostInstance, isCompositeFiber, getDisplayName } from "bippy";
 import { getOwnerStack } from "bippy/source";
 import { resolveFrameFilePath } from "./utils/source-resolve.js";
@@ -8,10 +8,12 @@ import { COLORS } from "./design-tokens.js";
 import { setInteractionPointerEvents, activateInteraction, getPageElementAtPoint } from "./interaction.js";
 import { getActiveTool } from "./canvas-state.js";
 import { addTextEditAnnotation } from "./canvas-state.js";
-import { isInternalName, isLibraryPath, isValidElement } from "./utils/component-filter.js";
-import { clearSelection, selectElement, getSelection } from "./selection.js";
+import { isInternalName, isLibraryPath, isMdxFilePath, isValidElement } from "./utils/component-filter.js";
+import { clearSelection, selectElement, getSelection, getSelectedElement } from "./selection.js";
 import { addChangeEntry } from "./changelog.js";
 import { computeNthOfType } from "./utils/nth-of-type.js";
+import { getElementVisibleText, getRangeVisibleText } from "./text-model.js";
+import { buildJSXPath } from "./utils/jsx-path.js";
 
 // --- Helpers ---
 
@@ -19,10 +21,46 @@ function truncate(text: string, maxLen: number): string {
   return text.length > maxLen ? text.slice(0, maxLen) + "…" : text;
 }
 
+const TEXT_EDIT_CONTEXT_WINDOW = 32;
+
+function findTextDiffRange(oldText: string, newText: string): { start: number; oldEnd: number } | null {
+  if (oldText === newText) return null;
+
+  let start = 0;
+  while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) {
+    start++;
+  }
+
+  let oldEnd = oldText.length;
+  let newEnd = newText.length;
+  while (oldEnd > start && newEnd > start && oldText[oldEnd - 1] === newText[newEnd - 1]) {
+    oldEnd--;
+    newEnd--;
+  }
+
+  return { start, oldEnd };
+}
+
+function buildTextEditAnchor(oldText: string, newText: string): TextEditAnchor | undefined {
+  const diff = findTextDiffRange(oldText, newText);
+  if (!diff) return undefined;
+
+  return {
+    start: diff.start,
+    end: diff.oldEnd,
+    contextBefore: oldText.slice(Math.max(0, diff.start - TEXT_EDIT_CONTEXT_WINDOW), diff.start),
+    contextAfter: oldText.slice(diff.oldEnd, Math.min(oldText.length, diff.oldEnd + TEXT_EDIT_CONTEXT_WINDOW)),
+  };
+}
+
 // --- Blocklist: replaced/void elements where contentEditable is useless ---
 const BLOCKED_TAGS = new Set([
   "IMG", "INPUT", "VIDEO", "IFRAME", "CANVAS", "SELECT",
   "TEXTAREA", "HR", "BR", "EMBED", "OBJECT", "PROGRESS",
+]);
+const TEXT_CONTAINER_TAGS = new Set([
+  "P", "SPAN", "A", "BUTTON", "LABEL", "LI", "TD", "TH", "BLOCKQUOTE", "FIGCAPTION",
+  "H1", "H2", "H3", "H4", "H5", "H6", "STRONG", "EM", "SMALL", "CODE", "PRE",
 ]);
 
 // --- Internal state ---
@@ -40,6 +78,7 @@ let pendingCommit: {
   originalText: string;
   newText: string;
   cursorOffset?: number;
+  textAnchor?: TextEditAnchor;
   originalInnerHTML: string;
   tagName: string;
 } | null = null;
@@ -110,6 +149,7 @@ function handleUpdateTextResponse(msg: Extract<ServerMessage, { type: "updateTex
       originalText: pc.originalText,
       newText: pc.newText,
       cursorOffset: pc.cursorOffset,
+      textAnchor: pc.textAnchor,
     };
     const identity: ElementIdentity = {
       componentName: pc.componentInfo.componentName,
@@ -161,9 +201,24 @@ async function resolveComponent(el: HTMLElement): Promise<ComponentInfo | null> 
         if (!frame.functionName) continue;
         const name = frame.functionName;
         if (name[0] !== name[0].toUpperCase()) continue;
-        if (isInternalName(name)) continue;
 
         const filePath = resolveFrameFilePath(frame.fileName);
+
+        // MDX content files: accept immediately — component name is synthetic
+        if (filePath && isMdxFilePath(filePath)) {
+          return {
+            tagName: el.tagName.toLowerCase(),
+            componentName: name,
+            filePath,
+            lineNumber: frame.lineNumber ?? 0,
+            columnNumber: frame.columnNumber ?? 0,
+            stack: [],
+            boundingRect: el.getBoundingClientRect(),
+            jsxPath: buildJSXPath(el, filePath, name) ?? undefined,
+          };
+        }
+
+        if (isInternalName(name)) continue;
 
         // Skip library components (framer-motion, react-router, etc.)
         if (!filePath || isLibraryPath(filePath) || isLibraryPath(frame.fileName || "")) continue;
@@ -176,6 +231,7 @@ async function resolveComponent(el: HTMLElement): Promise<ComponentInfo | null> 
           columnNumber: frame.columnNumber ?? 0,
           stack: [],
           boundingRect: el.getBoundingClientRect(),
+          jsxPath: buildJSXPath(el, filePath, name) ?? undefined,
         };
       }
     }
@@ -191,16 +247,21 @@ async function resolveComponent(el: HTMLElement): Promise<ComponentInfo | null> 
         const name = getDisplayName(current.type);
         const debugSource = current._debugSource || current._debugOwner?._debugSource;
 
-        if (name && name[0] === name[0].toUpperCase() && !isInternalName(name) && debugSource) {
-          return {
-            tagName: el.tagName.toLowerCase(),
-            componentName: name,
-            filePath: debugSource.fileName || "",
-            lineNumber: debugSource.lineNumber || 0,
-            columnNumber: debugSource.columnNumber || 0,
-            stack: [],
-            boundingRect: el.getBoundingClientRect(),
-          };
+        if (name && name[0] === name[0].toUpperCase() && debugSource) {
+          const filePath = debugSource.fileName || "";
+          // MDX content files: accept immediately — component name is synthetic
+          if (isMdxFilePath(filePath) || !isInternalName(name)) {
+            return {
+              tagName: el.tagName.toLowerCase(),
+              componentName: name,
+              filePath,
+              lineNumber: debugSource.lineNumber || 0,
+              columnNumber: debugSource.columnNumber || 0,
+              stack: [],
+              boundingRect: el.getBoundingClientRect(),
+              jsxPath: buildJSXPath(el, filePath, name) ?? undefined,
+            };
+          }
         }
       }
       if (!current.return) break;
@@ -212,6 +273,62 @@ async function resolveComponent(el: HTMLElement): Promise<ComponentInfo | null> 
   return null;
 }
 
+function hasDirectVisibleText(el: HTMLElement): boolean {
+  return Array.from(el.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && normalizeTextNodeValue(node.textContent).length > 0);
+}
+
+function normalizeTextNodeValue(value: string | null | undefined): string {
+  return (value ?? "").replace(/\u00a0/g, " ").trim();
+}
+
+function isInlineLikeDisplay(display: string): boolean {
+  return display === "inline" || display === "inline-block" || display === "inline-flex" || display === "contents";
+}
+
+function hasVisibleBlockChild(el: HTMLElement): boolean {
+  return Array.from(el.children).some((child) => {
+    if (!(child instanceof HTMLElement)) return false;
+    if (!getElementVisibleText(child).trim()) return false;
+    return !isInlineLikeDisplay(getComputedStyle(child).display);
+  });
+}
+
+function isEditableTextContainer(el: HTMLElement): boolean {
+  if (BLOCKED_TAGS.has(el.tagName)) return false;
+  if (!getElementVisibleText(el).trim()) return false;
+  if (el.hasAttribute("data-react-rewrite-interaction") || el.closest("#react-rewrite-root")) return false;
+
+  const tagPrefersTextEditing = TEXT_CONTAINER_TAGS.has(el.tagName);
+  return (tagPrefersTextEditing || hasDirectVisibleText(el)) && !hasVisibleBlockChild(el);
+}
+
+function getSelectionAnchorElement(): HTMLElement | null {
+  const selection = window.getSelection();
+  const anchorNode = selection?.anchorNode;
+  if (!anchorNode) return null;
+  if (anchorNode instanceof HTMLElement) return anchorNode;
+  return anchorNode.parentElement;
+}
+
+function resolveEditableTextTarget(e: MouseEvent): HTMLElement | null {
+  const selectionAnchor = getSelectionAnchorElement();
+  const eventTarget = e.target instanceof HTMLElement ? e.target : null;
+  const clickedElement = resolveClickTarget(e);
+  const start = selectionAnchor ?? eventTarget ?? clickedElement;
+  if (!start) return null;
+
+  let best: HTMLElement | null = null;
+  for (let current: HTMLElement | null = start; current; current = current.parentElement) {
+    if (current === document.body || current === document.documentElement) break;
+    if (current.closest("#react-rewrite-root")) break;
+    if (isEditableTextContainer(current)) {
+      best = current;
+    }
+  }
+
+  return best ?? clickedElement;
+}
+
 // --- Double-click handler ---
 
 function handleDblClick(e: MouseEvent): void {
@@ -219,24 +336,11 @@ function handleDblClick(e: MouseEvent): void {
     commitAndExit();
   }
 
-  let target: HTMLElement | null = null;
-  const eventTarget = e.target as HTMLElement;
-
-  if (
-    eventTarget instanceof HTMLElement &&
-    eventTarget !== document.documentElement &&
-    eventTarget !== document.body &&
-    !eventTarget.hasAttribute("data-react-rewrite-interaction") &&
-    !eventTarget.closest("#react-rewrite-root")
-  ) {
-    target = eventTarget;
-  } else {
-    target = getPageElementAtPoint(e.clientX, e.clientY);
-  }
+  const target = resolveEditableTextTarget(e);
 
   if (!target) return;
   if (BLOCKED_TAGS.has(target.tagName)) return;
-  if (!target.textContent?.trim()) return;
+  if (!getElementVisibleText(target).trim()) return;
 
   // Prevent browser's native word selection on double-click
   e.preventDefault();
@@ -248,20 +352,24 @@ function handleDblClick(e: MouseEvent): void {
 function enterEditMode(element: HTMLElement): void {
   editingElement = element;
 
-  originalTextContent = element.textContent || "";
+  originalTextContent = getElementVisibleText(element);
   originalInnerHTML = element.innerHTML;
   lastKnownText = originalTextContent;
 
   // Use the selection system's already-resolved component info (correct for React 19)
   // Falls back to local resolveComponent only if no selection exists
   const selectionInfo = getSelection();
-  if (selectionInfo && selectionInfo.filePath) {
+  const selectedElement = getSelectedElement();
+  if (selectionInfo && selectionInfo.filePath && selectedElement === element) {
     componentInfo = selectionInfo;
+    console.log("[ReactRewrite:textEdit] Using selection info:", { componentName: selectionInfo.componentName, filePath: selectionInfo.filePath, line: selectionInfo.lineNumber });
   } else {
     componentInfo = null;
+    console.log("[ReactRewrite:textEdit] No selection match, resolving async...", { hasSelection: !!selectionInfo, selectionFilePath: selectionInfo?.filePath, selectedElement: selectedElement?.tagName, editElement: element.tagName });
     resolveComponent(element).then((info) => {
       if (editingElement === element) {
         componentInfo = info;
+        console.log("[ReactRewrite:textEdit] Async resolve result:", { componentName: info?.componentName, filePath: info?.filePath, line: info?.lineNumber });
       }
     });
   }
@@ -291,7 +399,7 @@ function enterEditMode(element: HTMLElement): void {
 
 function handleInput(): void {
   if (editingElement) {
-    lastKnownText = editingElement.textContent || "";
+    lastKnownText = getElementVisibleText(editingElement);
   }
 }
 
@@ -370,7 +478,7 @@ function getCaretOffsetWithin(element: HTMLElement): number | undefined {
   const prefix = range.cloneRange();
   prefix.selectNodeContents(element);
   prefix.setEnd(range.endContainer, range.endOffset);
-  return prefix.toString().length;
+  return getRangeVisibleText(prefix).length;
 }
 
 function commitAndExit(options?: {
@@ -383,6 +491,7 @@ function commitAndExit(options?: {
   const newText = lastKnownText;
   const cursorOffset = getCaretOffsetWithin(editingElement);
   const changed = newText !== originalTextContent;
+  const textAnchor = changed ? buildTextEditAnchor(originalTextContent, newText) : undefined;
 
   console.log("[ReactRewrite:textEdit] commitAndExit changed:", changed, "componentInfo:", componentInfo?.componentName, "filePath:", componentInfo?.filePath);
 
@@ -412,6 +521,7 @@ function commitAndExit(options?: {
         originalText: originalTextContent,
         newText,
         cursorOffset,
+        textAnchor,
       };
       const identity: ElementIdentity = {
         componentName: componentInfo.componentName,
@@ -425,6 +535,9 @@ function commitAndExit(options?: {
         className: editingElement?.className || undefined,
         parentTagName: editingElement?.parentElement?.tagName.toLowerCase(),
         parentClassName: editingElement?.parentElement?.className || undefined,
+        nthOfType: editingElement ? computeNthOfType(editingElement) : undefined,
+        elementId: editingElement?.id || undefined,
+        jsxPath: componentInfo.jsxPath,
       });
       addChangeEntry({
         type: "textAnnotation",

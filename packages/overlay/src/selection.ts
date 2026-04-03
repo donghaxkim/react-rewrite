@@ -19,8 +19,8 @@ import { getFiberFromHostInstance, getDisplayName, isCompositeFiber, isInstrumen
 import { getOwnerStack } from "bippy/source";
 import { resolveFrameFilePath } from "./utils/source-resolve.js";
 import type { ComponentInfo, JSXStructuralPath } from "@react-rewrite/shared";
-import { getShadowRoot, updateComponentDetail } from "./toolbar.js";
-import { isInternalName, isFullPageElement, isValidElement } from "./utils/component-filter.js";
+import { getShadowRoot, updateComponentDetail, showToast } from "./toolbar.js";
+import { isInternalName, isMdxFilePath, isFullPageElement, isValidElement } from "./utils/component-filter.js";
 import { buildJSXPath } from "./utils/jsx-path.js";
 import { getElementsInArea } from "./utils/area-selection.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
@@ -28,10 +28,13 @@ import { setHoverTarget, setSelectionTarget, setMultiSelectionTargets, clearMult
 import { inspect, deselect as deselectProperty, commitAndDeselect, cancel as cancelProperty, hasActiveOverrides, preview, scheduledCommit } from "./properties/property-controller.js";
 import { getPageElementAtPoint, isPanningActive } from "./interaction.js";
 import { tryStartMove, updateMovePosition, endMove } from "./tools/move.js";
-import { getMoveContainingElement, hasMoveForElement } from "./canvas-state.js";
+import { getMoveContainingElement, hasMoveForElement, addClone, removeCloneEntry, addDelete } from "./canvas-state.js";
 import { getCachedFilePath, setCachedFilePath } from "./file-discovery-cache.js";
 import { requestFileDiscovery } from "./bridge.js";
 import { isTextEditing } from "./inline-text-edit.js";
+import { copyElement, hasClipboard, pasteElement, isInsideMapTemplate, resolveFromCloneAncestry, getCloneForElement } from "./clone-state.js";
+import { deleteElement } from "./delete-state.js";
+import { addChangeEntry } from "./changelog.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -58,7 +61,22 @@ type ResolvedComponent = {
  */
 async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedComponent | null> {
   const fiber = getFiberFromHostInstance(el);
-  if (!fiber) return null;
+  if (!fiber) {
+    const cloneResolution = resolveFromCloneAncestry(el);
+    if (cloneResolution) {
+      const { sourceInfo } = cloneResolution;
+      return {
+        tagName: el.tagName.toLowerCase(),
+        componentName: sourceInfo.componentName,
+        filePath: sourceInfo.filePath,
+        lineNumber: sourceInfo.lineNumber,
+        columnNumber: sourceInfo.columnNumber,
+        stack: sourceInfo.stack,
+        jsxPath: sourceInfo.jsxPath,
+      };
+    }
+    return null;
+  }
 
   // Try bippy/source getOwnerStack first — handles React 19 owner stacks with symbolication
   try {
@@ -69,9 +87,11 @@ async function resolveComponentFromElement(el: HTMLElement): Promise<ResolvedCom
         if (!frame.functionName) continue;
         const name = frame.functionName;
         if (name[0] !== name[0].toUpperCase()) continue;
-        if (isInternalName(name)) continue;
 
         const filePath = resolveFrameFilePath(frame.fileName);
+
+        // MDX content files: accept immediately — component name is synthetic
+        if (!(filePath && isMdxFilePath(filePath)) && isInternalName(name)) continue;
 
         stack.push({
           componentName: name,
@@ -124,7 +144,7 @@ function resolveComponentFromFiberWalk(el: HTMLElement, fiber: any): ResolvedCom
         columnNumber = debugSource.columnNumber || 0;
       }
 
-      if (name && name[0] === name[0].toUpperCase() && !isInternalName(name)) {
+      if (name && name[0] === name[0].toUpperCase() && (isMdxFilePath(filePath) || !isInternalName(name))) {
         stack.push({ componentName: name, filePath, lineNumber, columnNumber });
       }
     }
@@ -148,7 +168,22 @@ function resolveComponentFromFiberWalk(el: HTMLElement, fiber: any): ResolvedCom
 /** Synchronous-only resolve for hover labels and marquee (fast path) */
 function resolveComponentSync(el: HTMLElement): ResolvedComponent | null {
   const fiber = getFiberFromHostInstance(el);
-  if (!fiber) return null;
+  if (!fiber) {
+    const cloneResolution = resolveFromCloneAncestry(el);
+    if (cloneResolution) {
+      const { sourceInfo } = cloneResolution;
+      return {
+        tagName: el.tagName.toLowerCase(),
+        componentName: sourceInfo.componentName,
+        filePath: sourceInfo.filePath,
+        lineNumber: sourceInfo.lineNumber,
+        columnNumber: sourceInfo.columnNumber,
+        stack: sourceInfo.stack,
+        jsxPath: sourceInfo.jsxPath,
+      };
+    }
+    return null;
+  }
   return resolveComponentFromFiberWalk(el, fiber);
 }
 
@@ -860,6 +895,137 @@ function handleClick(e: MouseEvent): void {
 
 function handleKeyDown(e: KeyboardEvent): void {
   if (!isActive) return;
+
+  const isEditing = isTextEditing() ||
+    document.activeElement instanceof HTMLInputElement ||
+    document.activeElement instanceof HTMLTextAreaElement;
+
+  // Cmd+C — Copy selected element
+  if (e.key === "c" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !isEditing) {
+    if (selectedElement && currentSelection && currentSelection.filePath) {
+      copyElement(selectedElement, currentSelection);
+      showToast("Copied");
+      e.preventDefault();
+      return;
+    } else if (selectedElement && currentSelection && !currentSelection.filePath) {
+      showToast("Cannot copy — no source file resolved");
+      return;
+    }
+  }
+
+  // Cmd+V — Paste cloned element
+  if (e.key === "v" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !isEditing) {
+    if (hasClipboard()) {
+      const cloneEntry = pasteElement();
+      if (cloneEntry) {
+        addClone(cloneEntry);
+        addChangeEntry({
+          type: "clone",
+          componentName: cloneEntry.sourceLocation.componentName,
+          filePath: cloneEntry.sourceLocation.filePath,
+          summary: `duplicated <${cloneEntry.domHints.tagName}>`,
+          state: "pending",
+          elementIdentity: {
+            componentName: cloneEntry.sourceLocation.componentName,
+            filePath: cloneEntry.sourceLocation.filePath,
+            lineNumber: cloneEntry.sourceLocation.lineNumber,
+            columnNumber: cloneEntry.sourceLocation.columnNumber,
+            tagName: cloneEntry.domHints.tagName,
+            jsxPath: cloneEntry.domHints.jsxPath,
+          },
+          revertData: { type: "cloneRemove", cloneId: cloneEntry.id },
+        });
+        selectElement(cloneEntry.element);
+        showToast("Pasted");
+      }
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Cmd+D — Duplicate in place
+  if (e.key === "d" && (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && !isEditing) {
+    if (selectedElement && currentSelection && currentSelection.filePath) {
+      if (isInsideMapTemplate(currentSelection)) {
+        showToast("Cannot duplicate elements inside .map()");
+        e.preventDefault();
+        return;
+      }
+      copyElement(selectedElement, currentSelection);
+      const cloneEntry = pasteElement();
+      if (cloneEntry) {
+        addClone(cloneEntry);
+        addChangeEntry({
+          type: "clone",
+          componentName: cloneEntry.sourceLocation.componentName,
+          filePath: cloneEntry.sourceLocation.filePath,
+          summary: `duplicated <${cloneEntry.domHints.tagName}>`,
+          state: "pending",
+          elementIdentity: {
+            componentName: cloneEntry.sourceLocation.componentName,
+            filePath: cloneEntry.sourceLocation.filePath,
+            lineNumber: cloneEntry.sourceLocation.lineNumber,
+            columnNumber: cloneEntry.sourceLocation.columnNumber,
+            tagName: cloneEntry.domHints.tagName,
+            jsxPath: cloneEntry.domHints.jsxPath,
+          },
+          revertData: { type: "cloneRemove", cloneId: cloneEntry.id },
+        });
+        selectElement(cloneEntry.element);
+        showToast("Duplicated");
+      }
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // Delete / Backspace — remove selected element
+  if ((e.key === "Delete" || e.key === "Backspace") && !isEditing) {
+    if (selectedElement && currentSelection) {
+      const cloneEntry = getCloneForElement(selectedElement);
+      if (cloneEntry) {
+        removeCloneEntry(cloneEntry.id);
+        clearSelection();
+        showToast("Clone removed");
+        e.preventDefault();
+        return;
+      }
+      if (!currentSelection.filePath) {
+        showToast("Cannot delete — no source file resolved");
+        e.preventDefault();
+        return;
+      }
+      if (isInsideMapTemplate(currentSelection)) {
+        showToast("Cannot delete elements inside .map()");
+        e.preventDefault();
+        return;
+      }
+      const entry = deleteElement(selectedElement, currentSelection);
+      if (entry) {
+        addDelete(entry);
+        addChangeEntry({
+          type: "delete",
+          componentName: entry.sourceLocation.componentName,
+          filePath: entry.sourceLocation.filePath,
+          summary: `deleted <${entry.domHints.tagName}>`,
+          state: "pending",
+          elementIdentity: {
+            componentName: entry.sourceLocation.componentName,
+            filePath: entry.sourceLocation.filePath,
+            lineNumber: entry.sourceLocation.lineNumber,
+            columnNumber: entry.sourceLocation.columnNumber,
+            tagName: entry.domHints.tagName,
+            jsxPath: entry.domHints.jsxPath,
+          },
+          revertData: { type: "deleteRestore", deleteId: entry.id },
+        });
+        clearSelection();
+        showToast("Deleted");
+      }
+      e.preventDefault();
+      return;
+    }
+  }
 
   if (e.key === "Escape") {
     // Clear multi-select first

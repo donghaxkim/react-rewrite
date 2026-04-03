@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import jscodeshift from "jscodeshift";
-import type { SiblingInfo } from "@react-rewrite/shared";
+import type { SiblingInfo, TextEditAnchor } from "@react-rewrite/shared";
 import { detectQuoteStyle } from "./utils.js";
 import { logger } from "./logger.js";
 
@@ -571,15 +571,17 @@ export function mutateTextContent(
   newText: string,
   source?: string,
   cursorOffset?: number,
+  textAnchor?: TextEditAnchor,
 ): boolean {
   const children = target.node.children;
   const tag = target.node.openingElement?.name?.name || target.node.openingElement?.name?.property?.name || "?";
   const line = target.node.openingElement?.loc?.start?.line;
+  const finish = (): true => {
+    canonicalizeEditedTextSubtree(target.node, source);
+    return true;
+  };
   logger.debug(`[mutateText] target=<${tag}> line=${line} children=${children?.length ?? "null"} original="${originalText.slice(0,60)}" new="${newText.slice(0,60)}"`);
   if (!children) return false;
-  if (source) {
-    materializeBoundarySpaces(target.node, source);
-  }
 
   // Diagnostic: dump children types and values to see what we're working with
   for (let i = 0; i < children.length; i++) {
@@ -608,7 +610,7 @@ export function mutateTextContent(
         const prefixWs = child.value.slice(0, idx);
         const suffixWs = child.value.slice(idx + trimmed.length);
         child.value = prefixWs + newText + suffixWs;
-        return true;
+        return finish();
       }
     }
     if (
@@ -617,7 +619,7 @@ export function mutateTextContent(
       child.expression.value === originalText
     ) {
       child.expression.value = newText;
-      return true;
+      return finish();
     }
   }
 
@@ -627,18 +629,47 @@ export function mutateTextContent(
   const diffResult = findTextDiff(originalText, newText);
   logger.debug("[mutateText] diff:", diffResult ? `old="${diffResult.oldSubstring.slice(0,30)}" new="${diffResult.newSubstring.slice(0,30)}" prefix=${diffResult.prefixLen}` : "null");
   if (diffResult) {
+    if (textAnchor) {
+      const renderedText = getRenderedElementText(target.node, source);
+      const anchoredStart = resolveAnchoredStart(renderedText, diffResult.oldSubstring, textAnchor);
+      if (anchoredStart != null) {
+        if (!diffResult.oldSubstring) {
+          const anchoredInsert = insertInJSXTextAtOffset(target.node, anchoredStart, diffResult.newSubstring, source);
+          if (anchoredInsert) return finish();
+        } else {
+          const anchoredReplace = replaceWithinSingleSegmentAtOffset(
+            target.node,
+            anchoredStart,
+            anchoredStart + diffResult.oldSubstring.length,
+            diffResult.newSubstring,
+            source,
+          );
+          if (anchoredReplace) return finish();
+
+          const anchoredCross = replaceCrossElementText(
+            target.node,
+            diffResult.oldSubstring,
+            diffResult.newSubstring,
+            source,
+            anchoredStart,
+          );
+          if (anchoredCross) return finish();
+        }
+      }
+    }
+
     if (diffResult.oldSubstring) {
       const whitespaceSensitive = !/\S/.test(diffResult.oldSubstring) || !/\S/.test(diffResult.newSubstring);
       if (!whitespaceSensitive) {
         // Replace or delete — search with whitespace-flexible matching
         const found = replaceInJSXTextRecursive(target.node, diffResult.oldSubstring, diffResult.newSubstring);
-        if (found) return true;
+        if (found) return finish();
       }
       // If single-node search failed, the old text likely spans across child elements
       // (e.g. "do <strong>software</strong> stuff" → flat "do software stuff").
       // Try cross-element replacement.
       const crossFound = replaceCrossElementText(target.node, diffResult.oldSubstring, diffResult.newSubstring, source, diffResult.prefixLen);
-      if (crossFound) return true;
+      if (crossFound) return finish();
     } else if (diffResult.newSubstring && diffResult.prefixLen > 0) {
       // Pure insertion — find the JSXText child that contains the character at prefixLen,
       // then insert the new text at the right position within that child
@@ -646,14 +677,14 @@ export function mutateTextContent(
         ? Math.max(0, cursorOffset - diffResult.newSubstring.length)
         : diffResult.prefixLen;
       const found = insertInJSXTextAtOffset(target.node, insertionOffset, diffResult.newSubstring, source);
-      if (found) return true;
+      if (found) return finish();
     } else if (diffResult.newSubstring) {
       // Insertion at the very start — prepend to the first JSXText child
       const firstText = findFirstJSXText(target.node);
       if (firstText) {
         const ws = firstText.value.match(/^(\s*)/)?.[1] ?? "";
         firstText.value = ws + diffResult.newSubstring + firstText.value.slice(ws.length);
-        return true;
+        return finish();
       }
     }
   }
@@ -756,12 +787,12 @@ function getSourceBetween(prevNode: any, nextNode: any, source?: string, lineSta
 }
 
 function getRenderedChildText(child: any, source?: string, lineStarts?: number[]): string {
-  if (child.type === "JSXText") return child.value;
+  if (child.type === "JSXText") return collapseRenderedWhitespace(child.value);
   if (child.type === "JSXElement") return getRenderedElementText(child, source, lineStarts);
   if (child.type === "JSXExpressionContainer") {
     const expr = child.expression;
     if (expr?.type === "StringLiteral" || expr?.type === "Literal") {
-      return String(expr.value ?? "");
+      return collapseRenderedWhitespace(String(expr.value ?? ""));
     }
   }
   return "";
@@ -797,7 +828,7 @@ function getRenderedElementText(node: any, source?: string, lineStarts?: number[
     previousText = childText;
   }
 
-  return text;
+  return collapseRenderedWhitespace(text);
 }
 
 function prependToChildText(child: any, text: string): boolean {
@@ -866,6 +897,174 @@ function isEmptyTextLikeChild(child: any): boolean {
   return false;
 }
 
+function getTextLikeValue(child: any): string | null {
+  if (child.type === "JSXText") return child.value;
+  if (child.type === "JSXExpressionContainer" && child.expression?.type === "StringLiteral") {
+    return String(child.expression.value ?? "");
+  }
+  return null;
+}
+
+function setTextLikeValue(child: any, value: string): void {
+  if (child.type === "JSXText") {
+    child.value = value;
+    return;
+  }
+  if (child.type === "JSXExpressionContainer" && child.expression?.type === "StringLiteral") {
+    child.expression.value = value;
+  }
+}
+
+function isWhitespaceOnlyTextLikeChild(child: any): boolean {
+  const value = getTextLikeValue(child);
+  return value != null && /^[\t\n\f\r ]+$/.test(value);
+}
+
+function hasVisibleTextChild(children: any[], startIndex: number, source?: string, lineStarts?: number[]): boolean {
+  for (let i = startIndex; i < children.length; i++) {
+    const childText = getRenderedChildText(children[i], source, lineStarts);
+    if (/\S/.test(childText)) return true;
+  }
+  return false;
+}
+
+function hasVisibleTextInEntries(entries: any[], source?: string, lineStarts?: number[]): boolean {
+  return entries.some((entry) => /\S/.test(getRenderedChildText(entry, source, lineStarts)));
+}
+
+function mergeAdjacentTextLikeChildren(children: any[]): any[] {
+  const merged: any[] = [];
+  for (const child of children) {
+    if (isEmptyTextLikeChild(child)) continue;
+
+    const previous = merged[merged.length - 1];
+    if (previous?.type === "JSXText" && child.type === "JSXText") {
+      setTextLikeValue(previous, `${getTextLikeValue(previous) ?? ""}${getTextLikeValue(child) ?? ""}`);
+      continue;
+    }
+
+    merged.push(child);
+  }
+  return merged;
+}
+
+function trimTextLikeEdges(value: string): { core: string; hasLeadingWhitespace: boolean; hasTrailingWhitespace: boolean } {
+  return {
+    core: value.replace(/^\s+/, "").replace(/\s+$/, ""),
+    hasLeadingWhitespace: /^\s/.test(value),
+    hasTrailingWhitespace: /\s$/.test(value),
+  };
+}
+
+function insertSingleVisibleBoundarySpace(normalized: any[], upcomingChild?: any): void {
+  const previous = normalized[normalized.length - 1];
+  if (!previous) return;
+
+  const previousIsPlainText = previous.type === "JSXText";
+  const upcomingIsPlainText = upcomingChild?.type === "JSXText";
+
+  if (previousIsPlainText && upcomingIsPlainText) {
+    if (appendToChildText(previous, " ")) return;
+    if (upcomingChild && prependToChildText(upcomingChild, " ")) return;
+  }
+
+  normalized.push(createSpaceExpressionNode());
+}
+
+function canonicalizeEditedTextSubtree(node: any, source?: string, lineStarts = source ? getLineStarts(source) : undefined): void {
+  const children = node.children;
+  if (!children || children.length === 0) return;
+
+  for (const child of children) {
+    if (child.type === "JSXElement") {
+      canonicalizeEditedTextSubtree(child, source, lineStarts);
+    }
+  }
+
+  const normalized: any[] = [];
+  let pendingBoundarySpace = false;
+
+  for (const child of children) {
+    if (isTextLikeChild(child)) {
+      const value = getTextLikeValue(child) ?? "";
+      if (!value) continue;
+
+      const { core, hasLeadingWhitespace, hasTrailingWhitespace } = trimTextLikeEdges(value);
+      if (!core) {
+        if (hasVisibleTextInEntries(normalized, source, lineStarts)) {
+          pendingBoundarySpace = true;
+        }
+        continue;
+      }
+
+      setTextLikeValue(child, core);
+      if ((pendingBoundarySpace || hasLeadingWhitespace) && hasVisibleTextInEntries(normalized, source, lineStarts)) {
+        insertSingleVisibleBoundarySpace(normalized, child);
+      }
+
+      normalized.push(child);
+      pendingBoundarySpace = hasTrailingWhitespace;
+      continue;
+    }
+
+    const childText = getRenderedChildText(child, source, lineStarts);
+    const childHasVisibleText = /\S/.test(childText);
+    if ((pendingBoundarySpace || /^\s/.test(childText)) && childHasVisibleText && hasVisibleTextInEntries(normalized, source, lineStarts)) {
+      insertSingleVisibleBoundarySpace(normalized, child);
+    }
+
+    normalized.push(child);
+    pendingBoundarySpace = childHasVisibleText && /\s$/.test(childText);
+  }
+
+  node.children = mergeAdjacentTextLikeChildren(normalized);
+}
+
+function canonicalizeVisibleWhitespace(node: any, source?: string, lineStarts = source ? getLineStarts(source) : undefined): void {
+  const children = node.children;
+  if (!children || children.length === 0) return;
+
+  for (const child of children) {
+    if (child.type === "JSXElement") {
+      canonicalizeVisibleWhitespace(child, source, lineStarts);
+    }
+  }
+
+  const normalized: any[] = [];
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const value = getTextLikeValue(child);
+    if (value == null) {
+      normalized.push(child);
+      continue;
+    }
+
+    if (/^[\t\n\f\r ]+$/.test(value)) {
+      const hasLeftVisible = normalized.some((entry) => /\S/.test(getRenderedChildText(entry, source, lineStarts)));
+      let runEnd = i;
+      while (runEnd + 1 < children.length && isWhitespaceOnlyTextLikeChild(children[runEnd + 1])) {
+        runEnd++;
+      }
+      const hasRightVisible = hasVisibleTextChild(children, runEnd + 1, source, lineStarts);
+      if (!hasLeftVisible || !hasRightVisible) {
+        i = runEnd;
+        continue;
+      }
+      const runLength = runEnd - i + 1;
+      const spacesToKeep = Math.min(runLength, 2);
+      for (let count = 0; count < spacesToKeep; count++) {
+        normalized.push(createSpaceExpressionNode());
+      }
+      i = runEnd;
+      continue;
+    }
+
+    normalized.push(child);
+  }
+
+  node.children = normalized;
+}
+
 function materializeBoundarySpaces(node: any, source: string, lineStarts = getLineStarts(source)): void {
   const children = node.children;
   if (!children || children.length === 0) return;
@@ -925,6 +1124,8 @@ function materializeBoundarySpaces(node: any, source: string, lineStarts = getLi
       children.splice(i, 1);
     }
   }
+
+  canonicalizeVisibleWhitespace(node, source, lineStarts);
 }
 
 type ImmediateTextSegment =
@@ -956,7 +1157,20 @@ function buildImmediateTextSegments(parentNode: any, source?: string): Immediate
     previousText = childText;
   }
 
-  return segments;
+  const collapsedSegments: ImmediateTextSegment[] = [];
+  let previousEndsWithWhitespace = false;
+
+  for (const segment of segments) {
+    if (!segment.text) continue;
+    const whitespaceOnly = /^[\t\n\f\r ]+$/.test(segment.text);
+    if (whitespaceOnly && previousEndsWithWhitespace) {
+      continue;
+    }
+    collapsedSegments.push(whitespaceOnly ? { ...segment, text: " " } : segment);
+    previousEndsWithWhitespace = /\s$/.test(collapsedSegments[collapsedSegments.length - 1].text);
+  }
+
+  return collapsedSegments;
 }
 
 function getSegmentsText(segments: ImmediateTextSegment[]): string {
@@ -979,12 +1193,28 @@ function createInsertionNode(text: string): any {
   return { type: "JSXText", value: text };
 }
 
-function insertBetweenImmediateChildren(node: any, leftChildIndex: number, rightChildIndex: number, insertion: string): boolean {
+function createWhitespaceInsertionNodes(count: number): any[] {
+  return Array.from({ length: count }, () => createSpaceExpressionNode());
+}
+
+function insertBetweenImmediateChildren(
+  node: any,
+  leftChildIndex: number,
+  rightChildIndex: number,
+  insertion: string,
+  existingBoundaryText = "",
+): boolean {
   const children = node.children;
   if (!children || !insertion) return false;
 
   const leftChild = children[leftChildIndex];
   const rightChild = children[rightChildIndex];
+  if (/^\s+$/.test(insertion) && /^\s*$/.test(existingBoundaryText)) {
+    const totalSpaces = existingBoundaryText.length + insertion.length;
+    children.splice(rightChildIndex, 0, ...createWhitespaceInsertionNodes(Math.max(1, totalSpaces)));
+    return true;
+  }
+
   const preferExplicitBoundary = leftChild?.type !== "JSXText" || rightChild?.type !== "JSXText";
   if (!preferExplicitBoundary && rightChild?.type === "JSXText" && leftChildIndex + 1 === rightChildIndex) {
     rightChild.value = insertion + rightChild.value;
@@ -1062,6 +1292,50 @@ function normalizeWs(s: string): string {
   return s.replace(/\s+/g, " ");
 }
 
+function collapseRenderedWhitespace(value: string): string {
+  return value.replace(/[\t\n\f\r ]+/g, " ");
+}
+
+function isCollapsibleWhitespaceChar(char: string): boolean {
+  return char === " " || char === "\n" || char === "\r" || char === "\t" || char === "\f";
+}
+
+function mapRenderedOffsetToRawIndex(rawText: string, renderedOffset: number, bias: "start" | "end" = "start"): number {
+  if (renderedOffset <= 0) return 0;
+
+  let renderedIndex = 0;
+  let rawIndex = 0;
+
+  while (rawIndex < rawText.length) {
+    const char = rawText[rawIndex];
+    if (isCollapsibleWhitespaceChar(char)) {
+      const runStart = rawIndex;
+      while (rawIndex < rawText.length && isCollapsibleWhitespaceChar(rawText[rawIndex])) {
+        rawIndex++;
+      }
+
+      if (renderedIndex === renderedOffset) {
+        return bias === "end" ? rawIndex : runStart;
+      }
+
+      renderedIndex += 1;
+      if (renderedIndex >= renderedOffset) {
+        return bias === "end" ? rawIndex : runStart;
+      }
+      continue;
+    }
+
+    if (renderedIndex === renderedOffset) {
+      return rawIndex;
+    }
+
+    rawIndex++;
+    renderedIndex++;
+  }
+
+  return rawText.length;
+}
+
 function findTextDiff(oldText: string, newText: string): { oldSubstring: string; newSubstring: string; prefixLen: number } | null {
   if (oldText === newText) return null;
 
@@ -1086,6 +1360,123 @@ function findTextDiff(oldText: string, newText: string): { oldSubstring: string;
 
   if (!oldSubstring && !newSubstring) return null;
   return { oldSubstring, newSubstring, prefixLen };
+}
+
+function anchorMatchesAt(renderedText: string, start: number, oldSubstring: string, textAnchor: TextEditAnchor): boolean {
+  const oldLength = textAnchor.end - textAnchor.start;
+  if (start < 0 || start + oldLength > renderedText.length) return false;
+  if (oldSubstring && renderedText.slice(start, start + oldLength) !== oldSubstring) return false;
+
+  if (textAnchor.contextBefore) {
+    const before = renderedText.slice(Math.max(0, start - textAnchor.contextBefore.length), start);
+    if (before !== textAnchor.contextBefore) return false;
+  }
+
+  if (textAnchor.contextAfter) {
+    const after = renderedText.slice(start + oldLength, start + oldLength + textAnchor.contextAfter.length);
+    if (after !== textAnchor.contextAfter) return false;
+  }
+
+  return true;
+}
+
+function resolveAnchoredStart(renderedText: string, oldSubstring: string, textAnchor: TextEditAnchor): number | null {
+  const oldLength = textAnchor.end - textAnchor.start;
+  if (anchorMatchesAt(renderedText, textAnchor.start, oldSubstring, textAnchor)) {
+    return textAnchor.start;
+  }
+
+  const maxStart = renderedText.length - oldLength;
+  const candidates: number[] = [];
+  for (let start = 0; start <= maxStart; start++) {
+    if (anchorMatchesAt(renderedText, start, oldSubstring, textAnchor)) {
+      candidates.push(start);
+    }
+  }
+
+  if (candidates.length === 0) {
+    if (!oldSubstring && textAnchor.start >= 0 && textAnchor.start <= renderedText.length) {
+      return textAnchor.start;
+    }
+    if (
+      oldSubstring &&
+      textAnchor.start >= 0 &&
+      textAnchor.start + oldLength <= renderedText.length &&
+      renderedText.slice(textAnchor.start, textAnchor.start + oldLength) === oldSubstring
+    ) {
+      return textAnchor.start;
+    }
+    return null;
+  }
+
+  if (candidates.length === 1) return candidates[0];
+
+  return candidates.reduce((best, candidate) => {
+    const bestDistance = Math.abs(best - textAnchor.start);
+    const candidateDistance = Math.abs(candidate - textAnchor.start);
+    return candidateDistance < bestDistance ? candidate : best;
+  });
+}
+
+function replaceWithinSingleSegmentAtOffset(
+  node: any,
+  start: number,
+  end: number,
+  replacement: string,
+  source?: string,
+): boolean {
+  const segments = buildImmediateTextSegments(node, source);
+  if (segments.length === 0) return false;
+
+  let cursor = 0;
+  for (const segment of segments) {
+    const segmentStart = cursor;
+    const segmentEnd = cursor + segment.text.length;
+    cursor = segmentEnd;
+
+    if (start < segmentStart || end > segmentEnd) continue;
+    if (segment.type === "boundary") return false;
+
+    const child = node.children?.[segment.childIndex];
+    if (!child) return false;
+
+    if (child.type === "JSXText") {
+      const rawStart = mapRenderedOffsetToRawIndex(child.value, Math.max(0, start - segmentStart), "start");
+      const rawEnd = mapRenderedOffsetToRawIndex(child.value, Math.max(0, end - segmentStart), "end");
+      const localStart = Math.max(0, Math.min(child.value.length, rawStart));
+      const localEnd = Math.max(localStart, Math.min(child.value.length, rawEnd));
+      const nextValue = child.value.slice(0, localStart) + replacement + child.value.slice(localEnd);
+      if (nextValue === "" && localStart === 0 && localEnd === child.value.length) {
+        node.children.splice(segment.childIndex, 1);
+      } else {
+        child.value = nextValue;
+      }
+      return true;
+    }
+
+    if (child.type === "JSXExpressionContainer" && child.expression?.type === "StringLiteral") {
+      const value = String(child.expression.value ?? "");
+      const rawStart = mapRenderedOffsetToRawIndex(value, Math.max(0, start - segmentStart), "start");
+      const rawEnd = mapRenderedOffsetToRawIndex(value, Math.max(0, end - segmentStart), "end");
+      const localStart = Math.max(0, Math.min(value.length, rawStart));
+      const localEnd = Math.max(localStart, Math.min(value.length, rawEnd));
+      const nextValue = value.slice(0, localStart) + replacement + value.slice(localEnd);
+      if (nextValue === "" && localStart === 0 && localEnd === value.length) {
+        node.children.splice(segment.childIndex, 1);
+      } else {
+        child.expression.value = nextValue;
+      }
+      return true;
+    }
+
+    if (child.type === "JSXElement") {
+      return replaceWithinSingleSegmentAtOffset(child, start - segmentStart, end - segmentStart, replacement, source);
+    }
+
+    return false;
+  }
+
+  return false;
 }
 
 /**
@@ -1121,7 +1512,7 @@ function insertInJSXTextAtOffset(node: any, offset: number, insertion: string, s
     if (offset < segmentStart || offset > segmentEnd) continue;
 
     if (segment.type === "boundary") {
-      return insertBetweenImmediateChildren(node, segment.leftChildIndex, segment.rightChildIndex, insertion);
+      return insertBetweenImmediateChildren(node, segment.leftChildIndex, segment.rightChildIndex, insertion, segment.text);
     }
 
     const child = node.children?.[segment.childIndex];
@@ -1137,7 +1528,8 @@ function insertInJSXTextAtOffset(node: any, offset: number, insertion: string, s
     }
 
     if (child.type === "JSXText") {
-      const localOffset = Math.max(0, Math.min(child.value.length, offset - segmentStart));
+      const rawOffset = mapRenderedOffsetToRawIndex(child.value, Math.max(0, offset - segmentStart), "end");
+      const localOffset = Math.max(0, Math.min(child.value.length, rawOffset));
       child.value = child.value.slice(0, localOffset) + insertion + child.value.slice(localOffset);
       return true;
     }
@@ -1148,7 +1540,8 @@ function insertInJSXTextAtOffset(node: any, offset: number, insertion: string, s
 
     if (child.type === "JSXExpressionContainer" && child.expression?.type === "StringLiteral") {
       const value = String(child.expression.value ?? "");
-      const localOffset = Math.max(0, Math.min(value.length, offset - segmentStart));
+      const rawOffset = mapRenderedOffsetToRawIndex(value, Math.max(0, offset - segmentStart), "end");
+      const localOffset = Math.max(0, Math.min(value.length, rawOffset));
       child.expression.value = value.slice(0, localOffset) + insertion + value.slice(localOffset);
       return true;
     }
@@ -1187,6 +1580,7 @@ export function updateTextContent(
   originalText: string,
   newText: string,
   cursorOffset?: number,
+  textAnchor?: TextEditAnchor,
 ): string | null {
   const source = fs.readFileSync(filePath, "utf-8");
   const { j, root, quoteStyle } = parseSource(source, filePath);
@@ -1194,7 +1588,7 @@ export function updateTextContent(
   const target = findJSXElementAt(j, root, lineNumber, columnNumber);
   if (!target) return null;
 
-  if (mutateTextContent(target, originalText, newText, source, cursorOffset)) {
+  if (mutateTextContent(target, originalText, newText, source, cursorOffset, textAnchor)) {
     return root.toSource({ quote: quoteStyle });
   }
   return null;

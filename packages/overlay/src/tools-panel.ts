@@ -1,9 +1,8 @@
 // packages/overlay/src/tools-panel.ts
 import type { ToolType } from "@react-rewrite/shared";
-import { getActiveTool, setActiveTool, getToolOptions, setToolOption } from "./canvas-state.js";
+import { getActiveTool, setActiveTool } from "./canvas-state.js";
 import { getShadowRoot } from "./toolbar.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
-import { openColorPicker } from "./color-picker.js";
 import { toggleCanvasTransform, isCanvasActive } from "./canvas-transform.js";
 import { isTextEditing } from "./inline-text-edit.js";
 import { getActiveCount, isChangelogOpen, onChangelogChange, setChangelogOpen } from "./changelog.js";
@@ -22,7 +21,6 @@ const MOD_LABEL = navigator.platform.includes("Mac") ? "Cmd" : "Ctrl";
 
 const TOOL_DEFS: Array<{ type: ToolType; icon: string; label: string; shortcut: string }> = [
   { type: "select", icon: ICONS.pointer, label: "Select", shortcut: "S" },
-  { type: "text", icon: ICONS.text, label: "Text", shortcut: "T" },
 ];
 
 const PANEL_STYLES = `
@@ -382,7 +380,7 @@ export function initToolsPanel(): void {
   panelEl.className = "tools-panel";
 
   const groups = [
-    ["select", "text"],
+    ["select"],
   ];
 
   for (let gi = 0; gi < groups.length; gi++) {
@@ -633,46 +631,6 @@ function updateSubOptions(tool: ToolType): void {
   subOptionsEl.classList.add("hidden");
   subOptionsEl.classList.remove("visible");
 
-  if (tool === "text") {
-    subOptionsEl.classList.remove("hidden");
-    requestAnimationFrame(() => subOptionsEl?.classList.add("visible"));
-    const opts = getToolOptions();
-
-    // Color swatch
-    const swatch = document.createElement("button");
-    swatch.className = "color-swatch";
-    swatch.style.background = opts.textColor;
-    swatch.addEventListener("click", () => {
-      const rect = swatch.getBoundingClientRect();
-      openColorPicker({
-        initialColor: opts.textColor,
-        position: { x: rect.right + 8, y: rect.top },
-        showPropertyToggle: false,
-        onColorChange(hex) {
-          setToolOption("textColor", hex);
-          swatch.style.background = hex;
-        },
-        onClose() {},
-      });
-    });
-    subOptionsEl.appendChild(swatch);
-
-    // Segmented control for font sizes
-    const segmented = document.createElement("div");
-    segmented.className = "segmented-control";
-    for (const size of [12, 16, 20, 24]) {
-      const seg = document.createElement("button");
-      seg.className = `segment${size === opts.fontSize ? " active" : ""}`;
-      seg.textContent = `${size}`;
-      seg.addEventListener("click", () => {
-        setToolOption("fontSize", size);
-        segmented.querySelectorAll(".segment").forEach(s => s.classList.remove("active"));
-        seg.classList.add("active");
-      });
-      segmented.appendChild(seg);
-    }
-    subOptionsEl.appendChild(segmented);
-  }
 }
 
 export function flashToolButton(tool: ToolType): void {

@@ -37,6 +37,8 @@ npx react-rewrite-cli@latest
 - Select an element and inspect its component name, file path, and line number
 - Edit supported Tailwind-based layout, spacing, size, typography, and color properties
 - Double-click text to edit it inline
+- Copy, paste, and duplicate elements
+- Delete elements
 - Reorder sibling elements
 - Stage multiple changes and apply them with **Confirm**
 - Undo in-progress canvas changes and review applied changes in the changelog
@@ -98,10 +100,14 @@ Options:
   --verbose      Enable debug logging
 ```
 
-## Useful shortcuts
+## Shortcuts
 
 | Shortcut | Action |
 | --- | --- |
+| `Ctrl/Cmd + C` | Copy selected element |
+| `Ctrl/Cmd + V` | Paste copied element as sibling |
+| `Ctrl/Cmd + D` | Duplicate selected element in place |
+| `Delete / Backspace` | Remove selected element |
 | `Ctrl/Cmd + Z` | Undo canvas changes |
 | `Ctrl/Cmd + Shift + L` | Toggle changelog |
 | `Ctrl/Cmd + Click` | Follow links through the overlay |

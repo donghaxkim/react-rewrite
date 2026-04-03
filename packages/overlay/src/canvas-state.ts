@@ -5,6 +5,8 @@ import type {
   TextEditAnnotation, ElementIdentity, BatchOperation,
 } from "@react-rewrite/shared";
 import type { MoveEntry, ParentLayout } from "./move-state.js";
+import type { CloneEntry } from "./clone-state.js";
+import type { DeleteEntry } from "./delete-state.js";
 import { applyMoveTransform, clearMoveTransform, reacquireMovedElement } from "./move-state.js";
 import { getTokenMap } from "./properties/tailwind-resolver.js";
 import { setStyle } from "./utils/style-access.js";
@@ -20,6 +22,8 @@ export type PropertyChangeRuntime = Extract<CanvasUndoAction, { type: "propertyC
 };
 
 let moves: Map<string, MoveEntry> = new Map();
+let clones: Map<string, CloneEntry> = new Map();
+let deletes: Map<string, DeleteEntry> = new Map();
 let annotations: Annotation[] = [];
 let undoStack: CanvasUndoAction[] = [];
 type PendingPropertyOperation = {
@@ -148,13 +152,25 @@ export function addAnnotation(ann: Annotation): void {
 }
 
 /** DOM hints for text edit annotations — used by buildBatchOperations for fuzzy resolution. */
-const textEditDomHints = new Map<string, { tagName: string; className?: string; parentTagName?: string; parentClassName?: string }>();
+interface TextEditDomHints {
+  tagName: string;
+  className?: string;
+  parentTagName?: string;
+  parentClassName?: string;
+  nthOfType?: number;
+  elementId?: string;
+  jsxKey?: string;
+  jsxPath?: import("@react-rewrite/shared").JSXStructuralPath;
+  fileMtime?: number;
+  fileSize?: number;
+}
+const textEditDomHints = new Map<string, TextEditDomHints>();
 
 export function addTextEditAnnotation(
   ann: TextEditAnnotation,
   elementIdentity: ElementIdentity,
   originalInnerHTML: string,
-  domHints?: { tagName: string; className?: string; parentTagName?: string; parentClassName?: string },
+  domHints?: TextEditDomHints,
 ): void {
   annotations.push(ann);
   if (domHints) textEditDomHints.set(ann.id, domHints);
@@ -217,6 +233,53 @@ export function getMoveContainingElement(el: HTMLElement): MoveEntry | undefined
   return undefined;
 }
 
+// --- Clones ---
+
+export function getClones(): Map<string, CloneEntry> {
+  return clones;
+}
+
+export function addClone(entry: CloneEntry): void {
+  clones.set(entry.id, entry);
+  pushUndoAction({ type: "cloneCreate", cloneId: entry.id });
+}
+
+export function removeCloneEntry(id: string): void {
+  const entry = clones.get(id);
+  if (!entry) return;
+  if (entry.element.parentNode) {
+    entry.element.parentNode.removeChild(entry.element);
+  }
+  clones.delete(id);
+  notifyStateChange();
+}
+
+// --- Deletes ---
+
+export function getDeleteEntries(): Map<string, DeleteEntry> {
+  return deletes;
+}
+
+export function addDelete(entry: DeleteEntry): void {
+  deletes.set(entry.id, entry);
+  pushUndoAction({ type: "deleteCreate", deleteId: entry.id });
+}
+
+export function restoreDelete(id: string): void {
+  const entry = deletes.get(id);
+  if (!entry) return;
+  const { element, originalParent, originalNextSibling } = entry;
+  if (document.contains(originalParent)) {
+    if (originalNextSibling && originalParent.contains(originalNextSibling)) {
+      originalParent.insertBefore(element, originalNextSibling);
+    } else {
+      originalParent.appendChild(element);
+    }
+  }
+  deletes.delete(id);
+  notifyStateChange();
+}
+
 // --- Undo ---
 
 export function canvasUndo(): string | null {
@@ -267,6 +330,12 @@ export function canvasUndo(): string | null {
       removeAnnotation(action.annotationId);
       return "text edit reverted";
     }
+    case "cloneCreate":
+      removeCloneEntry(action.cloneId);
+      return "clone removed";
+    case "deleteCreate":
+      restoreDelete(action.deleteId);
+      return "delete undone";
   }
   return null;
 }
@@ -343,6 +412,25 @@ export function resetCanvas(): void {
       }
     }
   }
+  // Remove all cloned elements from DOM
+  for (const entry of clones.values()) {
+    if (entry.element.parentNode) {
+      entry.element.parentNode.removeChild(entry.element);
+    }
+  }
+  clones = new Map();
+  // Restore all deleted elements to DOM
+  for (const entry of deletes.values()) {
+    const { element, originalParent, originalNextSibling } = entry;
+    if (document.contains(originalParent)) {
+      if (originalNextSibling && originalParent.contains(originalNextSibling)) {
+        originalParent.insertBefore(element, originalNextSibling);
+      } else {
+        originalParent.appendChild(element);
+      }
+    }
+  }
+  deletes = new Map();
   moves = new Map();
   annotations = [];
   undoStack = [];
@@ -360,7 +448,7 @@ export function resetCanvas(): void {
 // --- Has Changes ---
 
 export function hasChanges(): boolean {
-  return moves.size > 0 || annotations.length > 0 || pendingPropertyOps.length > 0 || pendingReorderOps.length > 0;
+  return moves.size > 0 || clones.size > 0 || deletes.size > 0 || annotations.length > 0 || pendingPropertyOps.length > 0 || pendingReorderOps.length > 0;
 }
 
 export function canUndo(): boolean {
@@ -538,6 +626,7 @@ export function buildBatchOperations(): BatchOperation[] {
     // Text edits → updateText
     if (ann.type === "textEdit") {
       const textAnn = ann as TextEditAnnotation;
+      console.log("[ReactRewrite:buildBatch] textEdit annotation:", { filePath: textAnn.filePath, line: textAnn.lineNumber, col: textAnn.columnNumber, originalText: textAnn.originalText?.slice(0, 40), newText: textAnn.newText?.slice(0, 40) });
       if (textAnn.filePath) {
         const hints = textEditDomHints.get(textAnn.id);
         ops.push({
@@ -550,9 +639,16 @@ export function buildBatchOperations(): BatchOperation[] {
           className: hints?.className,
           parentTagName: hints?.parentTagName,
           parentClassName: hints?.parentClassName,
+          nthOfType: hints?.nthOfType,
+          id: hints?.elementId,
+          jsxKey: hints?.jsxKey,
+          jsxPath: hints?.jsxPath,
+          fileMtime: hints?.fileMtime,
+          fileSize: hints?.fileSize,
           originalText: textAnn.originalText,
           newText: textAnn.newText,
           cursorOffset: textAnn.cursorOffset,
+          textAnchor: textAnn.textAnchor,
         });
       }
     }
@@ -617,6 +713,52 @@ export function buildBatchOperations(): BatchOperation[] {
         layoutContext: layout,
       });
     }
+  }
+
+  // Clones → duplicateElement
+  for (const entry of clones.values()) {
+    const file = entry.sourceLocation.filePath;
+    if (!file) continue;
+    ops.push({
+      op: "duplicateElement",
+      file,
+      line: entry.sourceLocation.lineNumber,
+      col: entry.sourceLocation.columnNumber,
+      componentName: entry.sourceLocation.componentName,
+      tagName: entry.domHints.tagName,
+      className: entry.domHints.className,
+      parentTagName: entry.domHints.parentTagName,
+      parentClassName: entry.domHints.parentClassName,
+      nthOfType: entry.domHints.nthOfType,
+      id: entry.domHints.elementId,
+      jsxKey: entry.domHints.jsxKey,
+      fileMtime: entry.fileMtime,
+      fileSize: entry.fileSize,
+      jsxPath: entry.domHints.jsxPath,
+    });
+  }
+
+  // Deletes → deleteElement
+  for (const entry of deletes.values()) {
+    const file = entry.sourceLocation.filePath;
+    if (!file) continue;
+    ops.push({
+      op: "deleteElement",
+      file,
+      line: entry.sourceLocation.lineNumber,
+      col: entry.sourceLocation.columnNumber,
+      componentName: entry.sourceLocation.componentName,
+      tagName: entry.domHints.tagName,
+      className: entry.domHints.className,
+      parentTagName: entry.domHints.parentTagName,
+      parentClassName: entry.domHints.parentClassName,
+      nthOfType: entry.domHints.nthOfType,
+      id: entry.domHints.elementId,
+      jsxKey: entry.domHints.jsxKey,
+      fileMtime: entry.fileMtime,
+      fileSize: entry.fileSize,
+      jsxPath: entry.domHints.jsxPath,
+    });
   }
 
   for (const entry of pendingReorderOps) {

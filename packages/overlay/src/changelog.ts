@@ -101,6 +101,24 @@ export function revertEntry(id: string): void {
       addRevertLogEntry(entry);
       break;
     }
+
+    case "cloneRemove": {
+      const { cloneId } = entry.revertData;
+      import("./clone-state.js").then(({ removeClone }) => {
+        removeClone(cloneId);
+      });
+      addRevertLogEntry(entry);
+      break;
+    }
+
+    case "deleteRestore": {
+      const { deleteId } = entry.revertData;
+      import("./delete-state.js").then(({ restoreDeletedElement }) => {
+        restoreDeletedElement(deleteId);
+      });
+      addRevertLogEntry(entry);
+      break;
+    }
   }
 
   entry.state = "reverted";

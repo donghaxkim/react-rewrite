@@ -19,7 +19,7 @@ export function getDebugSource(fiber: unknown): FiberDebugSource | undefined {
   return f._debugSource ?? f._debugOwner?._debugSource;
 }
 import { resolveFrameFilePath } from "../utils/source-resolve.js";
-import { isInternalName, isLibraryPath } from "../utils/component-filter.js";
+import { isInternalName, isMdxFilePath, isLibraryPath } from "../utils/component-filter.js";
 import { getPageElementAtPoint } from "../interaction.js";
 import { getCachedFilePath, setCachedFilePath } from "../file-discovery-cache.js";
 import { requestFileDiscovery } from "../bridge.js";
@@ -46,9 +46,21 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
         if (!frame.functionName) continue;
         const name = frame.functionName;
         if (name[0] !== name[0].toUpperCase()) continue;
-        if (isInternalName(name)) continue;
 
         const filePath = resolveFrameFilePath(frame.fileName);
+
+        // MDX content files: accept immediately — component name is synthetic
+        if (filePath && isMdxFilePath(filePath)) {
+          result = {
+            componentName: name,
+            filePath,
+            lineNumber: frame.lineNumber ?? 0,
+            columnNumber: frame.columnNumber ?? 0,
+          };
+          break;
+        }
+
+        if (isInternalName(name)) continue;
         if (!filePath || isLibraryPath(filePath) || isLibraryPath(frame.fileName || "")) continue;
 
         result = {
@@ -70,11 +82,12 @@ export async function resolveComponentAtPoint(clientX: number, clientY: number):
     while (current) {
       if (isCompositeFiber(current)) {
         const name = getDisplayName(current.type);
-        if (name && name[0] === name[0].toUpperCase() && !isInternalName(name)) {
-          const debugSource = getDebugSource(current);
+        const debugSource = getDebugSource(current);
+        const filePath = debugSource?.fileName || "";
+        if (name && name[0] === name[0].toUpperCase() && (isMdxFilePath(filePath) || !isInternalName(name))) {
           result = {
             componentName: name,
-            filePath: debugSource?.fileName || "",
+            filePath,
             lineNumber: debugSource?.lineNumber || 0,
             columnNumber: debugSource?.columnNumber ?? 0,
           };
@@ -119,9 +132,21 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
         if (!frame.functionName) continue;
         const name = frame.functionName;
         if (name[0] !== name[0].toUpperCase()) continue;
-        if (isInternalName(name)) continue;
 
         const filePath = resolveFrameFilePath(frame.fileName);
+
+        // MDX content files: accept immediately — component name is synthetic
+        if (filePath && isMdxFilePath(filePath)) {
+          result = {
+            componentName: name,
+            filePath,
+            lineNumber: frame.lineNumber ?? 0,
+            columnNumber: frame.columnNumber ?? 0,
+          };
+          break;
+        }
+
+        if (isInternalName(name)) continue;
         if (!filePath || isLibraryPath(filePath) || isLibraryPath(frame.fileName || "")) continue;
 
         result = {
@@ -142,11 +167,12 @@ export async function resolveComponentFromElement(el: HTMLElement): Promise<Comp
     while (current) {
       if (isCompositeFiber(current)) {
         const name = getDisplayName(current.type);
-        if (name && name[0] === name[0].toUpperCase() && !isInternalName(name)) {
-          const debugSource = getDebugSource(current);
+        const debugSource = getDebugSource(current);
+        const filePath = debugSource?.fileName || "";
+        if (name && name[0] === name[0].toUpperCase() && (isMdxFilePath(filePath) || !isInternalName(name))) {
           result = {
             componentName: name,
-            filePath: debugSource?.fileName || "",
+            filePath,
             lineNumber: debugSource?.lineNumber || 0,
             columnNumber: debugSource?.columnNumber ?? 0,
           };

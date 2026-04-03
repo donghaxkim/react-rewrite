@@ -21,10 +21,12 @@ import {
   canvasUndo, canUndo, resetCanvas, hasChanges,
   onAnnotationRemoved,
   getMoves, removeMove,
+  getClones, removeCloneEntry,
   buildBatchOperations,
 } from "./canvas-state.js";
+import { updateCloneFileStat } from "./clone-state.js";
+import { updateDeleteFileStat } from "./delete-state.js";
 import { initPropertyController, destroyPropertyController } from "./properties/property-controller.js";
-import { textHandler, cleanupTextTool } from "./tools/text.js";
 import { initInlineTextEdit, destroyInlineTextEdit, cancelTextEditSession } from "./inline-text-edit.js";
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
@@ -231,6 +233,23 @@ function init(): void {
         }, 80);
       }
     }
+
+    // Check if clones were detached by HMR
+    for (const [id, entry] of getClones()) {
+      if (!document.contains(entry.element)) {
+        setTimeout(() => {
+          if (document.contains(entry.originalElement)) {
+            const parent = entry.originalElement.parentElement;
+            if (parent) {
+              parent.insertBefore(entry.element, entry.originalElement.nextSibling);
+              return;
+            }
+          }
+          removeCloneEntry(id);
+          showToast(`Clone of ${entry.sourceLocation.componentName} removed — original no longer present`);
+        }, 80);
+      }
+    }
   });
 
   moveObserver.observe(document.body, { childList: true, subtree: true });
@@ -250,15 +269,11 @@ function init(): void {
 
   // Select tool uses selection.ts capture-phase listeners directly (no interaction handler needed).
   // Only text tool needs an interaction handler.
-  registerToolHandler("text", textHandler);
 
   // Tool change listener — handles mode switching
   onToolChange((tool, prev) => {
     dismissOnboarding();
     flashToolButton(tool);
-
-    // Cleanup previous tool
-    if (prev === "text") cleanupTextTool();
 
     // Clear caches on tool switch
     clearElementCache();
@@ -333,6 +348,9 @@ function init(): void {
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
+        // Reload after source files are written — HMR may handle this,
+        // but force reload as fallback to ensure the page reflects changes
+        setTimeout(() => window.location.reload(), 600);
       } else if (successCount > 0) {
         // Partial success
         addChangeEntry({
@@ -347,8 +365,11 @@ function init(): void {
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
+        setTimeout(() => window.location.reload(), 600);
       } else {
-        showToast(`Error: ${msg.error || "Batch apply failed"}`);
+        const failedDetails = msg.results?.filter((r: any) => !r.success).map((r: any) => r.error).filter(Boolean).join("; ");
+        showToast(`Error: ${failedDetails || msg.error || "Batch apply failed"}`);
+        console.error("[ReactRewrite] Batch apply failed:", msg.results);
         generating = false;
         updateGenerateButton(hasChanges());
       }
@@ -363,6 +384,14 @@ function init(): void {
       return true;
     }
     return false;
+  });
+
+  // File stat responses — update clone and delete staleness data
+  onMessage((msg) => {
+    if (msg.type === "fileStatResult") {
+      updateCloneFileStat(msg.filePath, msg.mtime, msg.size);
+      updateDeleteFileStat(msg.filePath, msg.mtime, msg.size);
+    }
   });
 
   // Clear All

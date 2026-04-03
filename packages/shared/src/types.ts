@@ -27,6 +27,17 @@ export interface JSXStructuralPath {
   segments: JSXPathSegment[];
 }
 
+export interface TextEditAnchor {
+  /** Start offset of the changed range in the original rendered text */
+  start: number;
+  /** End offset of the changed range in the original rendered text */
+  end: number;
+  /** Suffix of the text immediately before the changed range */
+  contextBefore: string;
+  /** Prefix of the text immediately after the changed range */
+  contextAfter: string;
+}
+
 // ---------------------------------------------------------------------------
 // Batch Operations
 // ---------------------------------------------------------------------------
@@ -76,6 +87,7 @@ export type BatchOperation =
       originalText: string;
       newText: string;
       cursorOffset?: number;
+      textAnchor?: TextEditAnchor;
     }
   | {
       op: "reorder";
@@ -104,6 +116,41 @@ export type BatchOperation =
       pxDelta: number;
       direction: "positive" | "negative";
       layoutContext: "flex" | "grid" | "block" | "positioned";
+    }
+  | {
+      op: "duplicateElement";
+      file: string;
+      line: number;
+      col: number;
+      componentName?: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
+      jsxPath?: JSXStructuralPath;
+      insertAfterLine?: number;
+    }
+  | {
+      op: "deleteElement";
+      file: string;
+      line: number;
+      col: number;
+      componentName?: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
+      jsxPath?: JSXStructuralPath;
     };
 
 export type ClientMessage =
@@ -174,6 +221,7 @@ export type ClientMessage =
       originalText: string;
       newText: string;
       cursorOffset?: number;
+      textAnchor?: TextEditAnchor;
       tagName?: string;
       className?: string;
       parentTagName?: string;
@@ -348,7 +396,7 @@ export interface ComponentRef {
   columnNumber?: number;
 }
 
-export type ToolType = "select" | "text";
+export type ToolType = "select";
 
 export interface TextAnnotation {
   type: "text";
@@ -381,6 +429,7 @@ export interface TextEditAnnotation {
   originalText: string;
   newText: string;
   cursorOffset?: number;
+  textAnchor?: TextEditAnchor;
 }
 
 export type Annotation = TextAnnotation | ColorOverride | TextEditAnnotation;
@@ -403,7 +452,9 @@ export type CanvasUndoAction =
       annotationId: string;
       elementIdentity: ElementIdentity;
       originalInnerHTML: string;
-    };
+    }
+  | { type: "cloneCreate"; cloneId: string }
+  | { type: "deleteCreate"; deleteId: string };
 
 // --- Changelog Types ---
 
@@ -413,12 +464,14 @@ export type RevertData =
   | { type: "moveRemove"; moveId: string }
   | { type: "moveRestore"; moveId: string; previousDelta: { dx: number; dy: number } }
   | { type: "annotationRemove"; annotationId: string; originalInnerHTML: string; elementIdentity: ElementIdentity }
-  | { type: "batchApplyUndo"; undoIds: string[] };
+  | { type: "batchApplyUndo"; undoIds: string[] }
+  | { type: "cloneRemove"; cloneId: string }
+  | { type: "deleteRestore"; deleteId: string };
 
 export interface ChangeEntry {
   id: string;
   timestamp: number;
-  type: "property" | "move" | "textEdit" | "textAnnotation" | "commitBatch";
+  type: "property" | "move" | "textEdit" | "textAnnotation" | "commitBatch" | "clone" | "delete";
   componentName: string;
   filePath: string;
   summary: string;
