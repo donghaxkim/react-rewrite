@@ -537,6 +537,10 @@ function openShortcutsOverlay(): void {
     {
       label: "Actions",
       items: [
+        { action: "Copy", keys: [MOD_LABEL, "C"] },
+        { action: "Paste", keys: [MOD_LABEL, "V"] },
+        { action: "Duplicate", keys: [MOD_LABEL, "D"] },
+        { action: "Delete", keys: ["Del / ⌫"] },
         { action: "Undo", keys: [MOD_LABEL, "Z"] },
         { action: "Toggle Logs", keys: [MOD_LABEL, "Shift", "L"] },
         { action: "Keyboard Shortcuts", keys: ["?"] },
