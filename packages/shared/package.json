@@ -2,8 +2,8 @@
   "name": "@react-rewrite/shared",
   "version": "0.1.0",
   "private": true,
-  "main": "src/types.ts",
-  "types": "src/types.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "build": "tsc --build"
   },

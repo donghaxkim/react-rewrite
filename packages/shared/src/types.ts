@@ -151,6 +151,28 @@ export type BatchOperation =
       fileMtime?: number;
       fileSize?: number;
       jsxPath?: JSXStructuralPath;
+    }
+  | {
+      op: "insertComponent";
+      file: string;
+      line: number;
+      col: number;
+      position: "inside" | "before" | "after";
+      componentName: string;
+      importPath: string;
+      importNames: string[];
+      jsxString: string;
+      registryName: string;
+      tagName?: string;
+      className?: string;
+      parentTagName?: string;
+      parentClassName?: string;
+      nthOfType?: number;
+      id?: string;
+      jsxKey?: string;
+      fileMtime?: number;
+      fileSize?: number;
+      jsxPath?: JSXStructuralPath;
     };
 
 export type ClientMessage =
@@ -236,7 +258,8 @@ export type ClientMessage =
       type: "commitBatch";
       operations: BatchOperation[];
     }
-  | { type: "fileStat"; filePath: string };
+  | { type: "fileStat"; filePath: string }
+  | { type: "getComponentRegistry" };
 
 export type ServerMessage =
   | { type: "reorderComplete"; success: boolean; error?: string }
@@ -273,7 +296,17 @@ export type ServerMessage =
       error?: string;
       undoIds: string[];
     }
-  | { type: "fileStatResult"; filePath: string; mtime: number; size: number };
+  | { type: "fileStatResult"; filePath: string; mtime: number; size: number }
+  | {
+      type: "componentRegistry";
+      components: import("./registry-types.js").RegistryItem[];
+      blocks: import("./registry-types.js").RegistryItem[];
+    }
+  | {
+      type: "registryPrefetchProgress";
+      fetched: number;
+      total: number;
+    };
 
 export interface ComponentInfo {
   tagName: string;
