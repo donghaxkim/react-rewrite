@@ -14,6 +14,7 @@ const ICONS = {
   logs: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 6h12"></path><path d="M7 12h12"></path><path d="M7 18h12"></path><path d="M3.5 6h.01"></path><path d="M3.5 12h.01"></path><path d="M3.5 18h.01"></path></svg>`,
   undo: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M7.18,4,8.6,5.44,6.06,8h9.71a6,6,0,0,1,0,12h-2V18h2a4,4,0,0,0,0-8H6.06L8.6,12.51,7.18,13.92,2.23,9Z"></path></svg>`,
   reset: `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M22 12C22 17.5228 17.5229 22 12 22C6.4772 22 2 17.5228 2 12C2 6.47715 6.4772 2 12 2V4C7.5817 4 4 7.58172 4 12C4 16.4183 7.5817 20 12 20C16.4183 20 20 16.4183 20 12C20 9.53614 18.8862 7.33243 17.1346 5.86492L15 8V2L21 2L18.5535 4.44656C20.6649 6.28002 22 8.9841 22 12Z"></path></svg>`,
+  palette: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
 };
 
 const MOD_KEY = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+";
@@ -190,6 +191,7 @@ const PANEL_STYLES = `
     color: ${COLORS.textSecondary};
     cursor: pointer;
     border-radius: 50%;
+    position: relative;
     padding: 0;
     transition: background ${TRANSITIONS.fast}, color ${TRANSITIONS.fast}, opacity ${TRANSITIONS.fast};
   }
@@ -236,6 +238,40 @@ const PANEL_STYLES = `
   .action-btn.danger:hover {
     background: ${COLORS.dangerSoft};
     color: ${COLORS.danger};
+  }
+  .action-btn .tooltip {
+    display: none;
+    position: absolute;
+    left: 44px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: ${COLORS.bgPrimary};
+    border: 1px solid ${COLORS.border};
+    box-shadow: ${SHADOWS.sm};
+    color: ${COLORS.textPrimary};
+    padding: 4px 8px;
+    border-radius: ${RADII.sm};
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity ${TRANSITIONS.medium};
+    z-index: 2147483647;
+  }
+  .action-btn .tooltip .shortcut-badge {
+    display: inline-block;
+    background: ${COLORS.bgSecondary};
+    color: ${COLORS.textTertiary};
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .action-btn:hover .tooltip {
+    display: block;
+  }
+  .action-btn.tooltip-visible .tooltip {
+    opacity: 1;
   }
   .help-btn {
     width: 32px;
@@ -351,10 +387,12 @@ let logsBtn: HTMLButtonElement | null = null;
 let logsBadgeEl: HTMLSpanElement | null = null;
 let onClearAll: (() => void) | null = null;
 let onCanvasUndo: (() => void) | null = null;
+let onPaletteToggle: (() => void) | null = null;
 let cleanupChangelogSubscription: (() => void) | null = null;
 
 export function setOnClearAll(fn: () => void): void { onClearAll = fn; }
 export function setOnCanvasUndo(fn: () => void): void { onCanvasUndo = fn; }
+export function setOnPaletteToggle(fn: () => void): void { onPaletteToggle = fn; }
 
 export function updateCanvasUndoButton(enabled: boolean): void {
   if (canvasUndoBtn) canvasUndoBtn.disabled = !enabled;
@@ -457,6 +495,28 @@ export function initToolsPanel(): void {
   });
   panelEl.appendChild(canvasBtn);
 
+  // Palette divider + button
+  const paletteDivider = document.createElement("div");
+  paletteDivider.className = "tool-divider";
+  panelEl.appendChild(paletteDivider);
+
+  const paletteBtn = document.createElement("button");
+  paletteBtn.className = "action-btn";
+  paletteBtn.innerHTML = `${ICONS.palette}<span class="tooltip">Components<span class="shortcut-badge">${navigator.platform.includes("Mac") ? "⇧⌘K" : "⇧Ctrl+K"}</span></span>`;
+  // 400ms tooltip delay matching tool buttons
+  let paletteTipTimer: ReturnType<typeof setTimeout> | null = null;
+  paletteBtn.addEventListener("mouseenter", () => {
+    paletteTipTimer = setTimeout(() => paletteBtn.classList.add("tooltip-visible"), 400);
+  });
+  paletteBtn.addEventListener("mouseleave", () => {
+    if (paletteTipTimer) clearTimeout(paletteTipTimer);
+    paletteBtn.classList.remove("tooltip-visible");
+  });
+  paletteBtn.addEventListener("click", () => {
+    if (onPaletteToggle) onPaletteToggle();
+  });
+  panelEl.appendChild(paletteBtn);
+
   // Help button — shows keyboard shortcuts
   const helpBtn = document.createElement("button");
   helpBtn.className = "help-btn";
@@ -476,6 +536,13 @@ function handleToolShortcut(e: KeyboardEvent): void {
   const active = document.activeElement;
   if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
   if (isTextEditing()) return;
+
+  // ⇧⌘K / ⇧Ctrl+K → toggle palette
+  if (e.key === "K" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+    if (onPaletteToggle) onPaletteToggle();
+    e.preventDefault();
+    return;
+  }
 
   // Modifier keys → ignore (let browser handle Cmd+T, Ctrl+V, etc.)
   if (e.ctrlKey || e.metaKey || e.altKey) return;
