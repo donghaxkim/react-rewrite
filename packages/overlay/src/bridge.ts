@@ -145,3 +145,21 @@ export function requestFileStat(filePath: string): Promise<{ mtime: number; size
     setTimeout(() => { unsub(); resolve({ mtime: 0, size: 0 }); }, 2000);
   });
 }
+
+/** Request the component registry from CLI. Returns a promise that resolves with components and blocks arrays. */
+export function requestComponentRegistry(): Promise<{ components: any[]; blocks: any[] }> {
+  return new Promise((resolve) => {
+    const unsub = onMessage((msg: any) => {
+      if (msg.type === "componentRegistry") {
+        unsub();
+        resolve({ components: msg.components, blocks: msg.blocks });
+      }
+    });
+    send({ type: "getComponentRegistry" } as any);
+    // Timeout after 10 seconds
+    setTimeout(() => {
+      unsub();
+      resolve({ components: [], blocks: [] });
+    }, 10000);
+  });
+}
