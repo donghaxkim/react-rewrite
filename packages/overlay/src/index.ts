@@ -1,7 +1,7 @@
 // packages/overlay/src/index.ts
 import { connect, disconnect, send, onMessage } from "./bridge.js";
 import { mountToolbar, destroyToolbar, setOnGenerate, setOnCanvasUndo, updateGenerateButton, showToast, getShadowRoot } from "./toolbar.js";
-import { initSelection, deactivateSelection, clearSelection, setEnabled } from "./selection.js";
+import { initSelection, deactivateSelection, clearSelection, setEnabled, getSelection, getSelectedElement } from "./selection.js";
 import { initHighlightCanvas, destroyHighlightCanvas } from "./highlight-canvas.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
@@ -11,7 +11,7 @@ import {
   reacquireMovedElementAsync,
   applyMoveTransform,
 } from "./move-state.js";
-import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, setOnCanvasUndo as setOnCanvasUndoPanel, updateCanvasUndoButton, flashToolButton } from "./tools-panel.js";
+import { initToolsPanel, destroyToolsPanel, updateActiveToolUI, setOnClearAll, setOnCanvasUndo as setOnCanvasUndoPanel, updateCanvasUndoButton, flashToolButton, setOnPaletteToggle } from "./tools-panel.js";
 import { initInteraction, destroyInteraction, activateInteraction, registerToolHandler } from "./interaction.js";
 import { clearElementCache } from "./utils/element-cache.js";
 import { clearVisibilityCache } from "./utils/component-filter.js";
@@ -31,6 +31,9 @@ import { initInlineTextEdit, destroyInlineTextEdit, cancelTextEditSession } from
 import { initCanvasTransform, destroyCanvasTransform, resetCanvasTransform } from "./canvas-transform.js";
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-tokens.js";
 import { initChangelog, destroyChangelog, addChangeEntry, isChangelogOpen, setChangelogOpen, clearChangelog } from "./changelog.js";
+import { createPalettePanel } from "./palette/palette-panel.js";
+import { stageComponentInsertion } from "./palette/palette-mount.js";
+import { buildPaletteOperations, clearPaletteInserts, getPaletteInserts } from "./palette/palette-state.js";
 
 declare global {
   interface Window {
@@ -158,6 +161,7 @@ function resetOverlayState(): void {
   clearChangelog();
   setChangelogOpen(false);
   resetCanvas();
+  clearPaletteInserts();
   resetCanvasTransform();
   clearElementCache();
   clearVisibilityCache();
@@ -197,6 +201,30 @@ function init(): void {
   if (shadowRoot) {
     initPropertyController(shadowRoot);
     initChangelog(shadowRoot);
+  }
+
+  // Initialize palette panel
+  let palette: ReturnType<typeof createPalettePanel> | null = null;
+  if (shadowRoot) {
+    palette = createPalettePanel(shadowRoot, {
+      onInsert: (item, variant) => {
+        const position = palette!.getInsertPosition();
+        const selectedEl = getSelectedElement();
+        const componentInfo = getSelection();
+        const targetElement = selectedEl ?? document.querySelector("main") ?? document.body;
+        stageComponentInsertion(
+          { name: item.name, displayName: item.name, description: "", category: item.category, type: item.type, dependencies: [], registryDependencies: [] },
+          targetElement as HTMLElement,
+          position,
+          {
+            filePath: componentInfo?.filePath ?? "",
+            line: componentInfo?.lineNumber ?? 0,
+            col: componentInfo?.columnNumber ?? 0,
+          },
+          variant,
+        );
+      },
+    });
   }
 
   // Phase 1 systems
@@ -263,6 +291,7 @@ function init(): void {
   });
 
   initToolsPanel();
+  setOnPaletteToggle(() => palette?.toggle());
   initInlineTextEdit();
   initInteraction();
   showOnboardingHint();
@@ -305,12 +334,12 @@ function init(): void {
       showToast("Operation in progress");
       return;
     }
-    if (!hasChanges()) {
+    if (!hasChanges() && getPaletteInserts().size === 0) {
       showToast("Nothing to confirm — make some visual changes first");
       return;
     }
 
-    const batchOps = buildBatchOperations();
+    const batchOps = [...buildBatchOperations(), ...buildPaletteOperations()];
     if (batchOps.length > 0) {
       generating = true;
       updateGenerateButton(false);
@@ -348,6 +377,7 @@ function init(): void {
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
+        clearPaletteInserts();
         // Reload after source files are written — HMR may handle this,
         // but force reload as fallback to ensure the page reflects changes
         setTimeout(() => window.location.reload(), 600);
@@ -365,6 +395,7 @@ function init(): void {
         clearSelection();
         clearAnnotationLayer();
         resetCanvas();
+        clearPaletteInserts();
         setTimeout(() => window.location.reload(), 600);
       } else {
         const failedDetails = msg.results?.filter((r: any) => !r.success).map((r: any) => r.error).filter(Boolean).join("; ");
