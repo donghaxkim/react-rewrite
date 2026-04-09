@@ -22,6 +22,7 @@ import { executeBatch } from "./batch-transform.js";
 import { ShadcnProvider } from "./registry/shadcn-provider.js";
 import { getCacheDir, writeCachedIndex, writeCachedItem, readCachedIndex, readCachedItem, isCacheStale } from "./registry/registry-cache.js";
 import { writeComponentFiles } from "./registry/component-writer.js";
+import { compileAllComponents } from "./registry/component-compiler.js";
 
 interface SketchServerOptions {
   port: number;
@@ -119,6 +120,9 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
       }
       registryReady = true;
       logger.info(`[Registry] Loaded ${registryItemCache.size} items from cache`);
+      // Compile components for live preview in the overlay
+      const allItems = Array.from(registryItemCache.values());
+      await compileAllComponents(allItems, projectRoot);
       return;
     }
 
@@ -141,6 +145,8 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
       writeCachedIndex(cacheDir, registryIndex);
       registryReady = true;
       logger.info(`[Registry] Prefetched ${items.length} items`);
+      // Compile components for live preview in the overlay
+      await compileAllComponents(items, projectRoot);
     } catch (err) {
       logger.error("[Registry] Prefetch failed:", err instanceof Error ? err.message : String(err));
     }

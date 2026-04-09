@@ -52,6 +52,7 @@ program
         targetHost: host,
         proxyPort,
         wsPort,
+        projectRoot: detection.projectRoot,
         getActiveClient: sketchServer.getActiveClient,
       });
 

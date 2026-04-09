@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import httpProxy from "http-proxy";
 import { WebSocket } from "ws";
+import { getCompiledDir } from "./registry/component-compiler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,13 +15,14 @@ interface ProxyServerOptions {
   targetHost: string;
   proxyPort: number;
   wsPort: number;
+  projectRoot: string;
   getActiveClient: () => WebSocket | null;
 }
 
 export function createProxyServer(
   options: ProxyServerOptions
 ): http.Server {
-  const { targetPort, targetHost, proxyPort, wsPort, getActiveClient } = options;
+  const { targetPort, targetHost, proxyPort, wsPort, projectRoot, getActiveClient } = options;
 
   const proxy = httpProxy.createProxyServer({
     target: `http://${targetHost}:${targetPort}`,
@@ -63,6 +65,25 @@ export function createProxyServer(
         "Cache-Control": "public, max-age=31536000, immutable",
       });
       fs.createReadStream(path.join(fontsDir, "inter-semibold.woff2")).pipe(res);
+      return;
+    }
+
+    // Serve compiled component files for palette preview
+    const componentMatch = normalizedUrl.match(/^\/__react-rewrite\/components\/(.+)\.js$/);
+    if (componentMatch) {
+      const componentName = componentMatch[1];
+      const compiledPath = path.join(getCompiledDir(projectRoot), `${componentName}.js`);
+      if (fs.existsSync(compiledPath)) {
+        res.writeHead(200, {
+          "Content-Type": "application/javascript",
+          "Cache-Control": "no-cache",
+          "Access-Control-Allow-Origin": "*",
+        });
+        fs.createReadStream(compiledPath).pipe(res);
+        return;
+      }
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end(`Component ${componentName} not compiled`);
       return;
     }
 

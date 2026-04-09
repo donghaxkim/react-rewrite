@@ -45,6 +45,7 @@
   "dependencies": {
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
+    "esbuild": "^0.28.0",
     "http-proxy": "^1.18.1",
     "jscodeshift": "^17.1.0",
     "open": "^10.1.0",

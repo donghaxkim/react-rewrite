@@ -25,7 +25,7 @@ export interface PaletteCallbacks {
 }
 
 // ---------------------------------------------------------------------------
-// Variant definitions (hardcoded)
+// Variant definitions
 // ---------------------------------------------------------------------------
 
 const COMPONENT_VARIANTS: Record<string, Array<{ name: string; props: Record<string, string> }>> = {
@@ -50,29 +50,80 @@ const COMPONENT_VARIANTS: Record<string, Array<{ name: string; props: Record<str
 };
 
 // ---------------------------------------------------------------------------
+// Component thumbnail SVGs — small visual previews like Figma
+// ---------------------------------------------------------------------------
+
+const THUMBNAILS: Record<string, string> = {
+  button: `<svg viewBox="0 0 80 40" fill="none"><rect x="8" y="10" width="64" height="20" rx="6" fill="#3b82f6"/><text x="40" y="24" text-anchor="middle" font-size="9" font-weight="600" fill="white">Button</text></svg>`,
+  input: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="10" width="72" height="20" rx="4" fill="none" stroke="#555" stroke-width="1"/><text x="12" y="24" font-size="8" fill="#666">Type here...</text></svg>`,
+  textarea: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="4" width="72" height="32" rx="4" fill="none" stroke="#555" stroke-width="1"/><line x1="12" y1="12" x2="52" y2="12" stroke="#555" stroke-width="1"/><line x1="12" y1="20" x2="44" y2="20" stroke="#555" stroke-width="1"/><line x1="12" y1="28" x2="36" y2="28" stroke="#555" stroke-width="1"/></svg>`,
+  card: `<svg viewBox="0 0 80 40" fill="none"><rect x="6" y="2" width="68" height="36" rx="4" fill="#1e1e24" stroke="#333" stroke-width="1"/><rect x="10" y="6" width="30" height="4" rx="1" fill="#888"/><rect x="10" y="14" width="56" height="2" rx="1" fill="#444"/><rect x="10" y="20" width="48" height="2" rx="1" fill="#444"/><rect x="10" y="28" width="24" height="8" rx="3" fill="#3b82f6"/></svg>`,
+  badge: `<svg viewBox="0 0 80 40" fill="none"><rect x="20" y="12" width="40" height="16" rx="8" fill="#3b82f6"/><text x="40" y="24" text-anchor="middle" font-size="8" font-weight="500" fill="white">Badge</text></svg>`,
+  label: `<svg viewBox="0 0 80 40" fill="none"><text x="8" y="24" font-size="10" font-weight="500" fill="#ccc">Label</text></svg>`,
+  checkbox: `<svg viewBox="0 0 80 40" fill="none"><rect x="12" y="12" width="16" height="16" rx="3" fill="#3b82f6"/><polyline points="16,20 20,24 28,16" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><text x="34" y="24" font-size="9" fill="#ccc">Checked</text></svg>`,
+  switch: `<svg viewBox="0 0 80 40" fill="none"><rect x="16" y="12" width="32" height="16" rx="8" fill="#3b82f6"/><circle cx="40" cy="20" r="6" fill="white"/></svg>`,
+  select: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="10" width="72" height="20" rx="4" fill="none" stroke="#555" stroke-width="1"/><text x="12" y="24" font-size="8" fill="#888">Select...</text><polyline points="64,17 68,23 72,17" fill="none" stroke="#666" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  separator: `<svg viewBox="0 0 80 40" fill="none"><line x1="8" y1="20" x2="72" y2="20" stroke="#444" stroke-width="1"/></svg>`,
+  avatar: `<svg viewBox="0 0 80 40" fill="none"><circle cx="40" cy="16" r="10" fill="#444"/><circle cx="40" cy="13" r="4" fill="#888"/><ellipse cx="40" cy="22" rx="6" ry="4" fill="#888"/><text x="40" y="36" text-anchor="middle" font-size="6" fill="#666">CN</text></svg>`,
+  skeleton: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="6" width="72" height="8" rx="4" fill="#333"/><rect x="4" y="18" width="56" height="8" rx="4" fill="#2a2a2a"/><rect x="4" y="30" width="40" height="8" rx="4" fill="#252525"/></svg>`,
+  progress: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="17" width="72" height="6" rx="3" fill="#333"/><rect x="4" y="17" width="36" height="6" rx="3" fill="#3b82f6"/></svg>`,
+  slider: `<svg viewBox="0 0 80 40" fill="none"><rect x="8" y="18" width="64" height="4" rx="2" fill="#333"/><rect x="8" y="18" width="32" height="4" rx="2" fill="#3b82f6"/><circle cx="40" cy="20" r="6" fill="white" stroke="#3b82f6" stroke-width="2"/></svg>`,
+  alert: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="4" width="72" height="32" rx="4" fill="none" stroke="#555" stroke-width="1"/><circle cx="14" cy="14" r="4" fill="#eab308"/><text x="14" y="16" text-anchor="middle" font-size="6" font-weight="700" fill="#1e1e24">!</text><rect x="22" y="12" width="40" height="3" rx="1" fill="#888"/><rect x="22" y="22" width="50" height="2" rx="1" fill="#555"/><rect x="22" y="28" width="36" height="2" rx="1" fill="#555"/></svg>`,
+  tabs: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="8" width="24" height="4" rx="1" fill="#3b82f6"/><rect x="32" y="8" width="24" height="4" rx="1" fill="#444"/><line x1="4" y1="14" x2="76" y2="14" stroke="#333" stroke-width="1"/><rect x="4" y="20" width="56" height="2" rx="1" fill="#444"/><rect x="4" y="26" width="48" height="2" rx="1" fill="#444"/></svg>`,
+  table: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="4" width="72" height="32" rx="3" fill="none" stroke="#444" stroke-width="1"/><line x1="4" y1="14" x2="76" y2="14" stroke="#444" stroke-width="1"/><line x1="4" y1="22" x2="76" y2="22" stroke="#333" stroke-width="0.5"/><line x1="4" y1="30" x2="76" y2="30" stroke="#333" stroke-width="0.5"/><line x1="36" y1="4" x2="36" y2="36" stroke="#333" stroke-width="0.5"/><text x="12" y="11" font-size="5" font-weight="600" fill="#888">Name</text><text x="44" y="11" font-size="5" font-weight="600" fill="#888">Status</text></svg>`,
+  toast: `<svg viewBox="0 0 80 40" fill="none"><rect x="8" y="8" width="64" height="24" rx="4" fill="#1e1e24" stroke="#333" stroke-width="1"/><circle cx="18" cy="20" r="4" fill="#22c55e"/><polyline points="16,20 18,22 21,18" fill="none" stroke="white" stroke-width="1.2"/><rect x="26" y="16" width="32" height="3" rx="1" fill="#888"/><rect x="26" y="22" width="24" height="2" rx="1" fill="#555"/></svg>`,
+  dialog: `<svg viewBox="0 0 80 40" fill="none"><rect x="0" y="0" width="80" height="40" fill="rgba(0,0,0,0.3)"/><rect x="12" y="6" width="56" height="28" rx="4" fill="#1e1e24" stroke="#444" stroke-width="1"/><rect x="18" y="11" width="28" height="3" rx="1" fill="#888"/><rect x="18" y="18" width="44" height="2" rx="1" fill="#555"/><rect x="36" y="26" width="26" height="6" rx="3" fill="#3b82f6"/></svg>`,
+  dropdown: `<svg viewBox="0 0 80 40" fill="none"><rect x="8" y="2" width="48" height="36" rx="4" fill="#1e1e24" stroke="#444" stroke-width="1"/><rect x="12" y="6" width="40" height="6" rx="2" fill="#333"/><text x="16" y="11" font-size="5" fill="#ccc">Option 1</text><rect x="12" y="14" width="40" height="6" rx="2" fill="#3b82f6"/><text x="16" y="19" font-size="5" fill="white">Option 2</text><rect x="12" y="22" width="40" height="6" rx="2" fill="#333"/><text x="16" y="27" font-size="5" fill="#ccc">Option 3</text></svg>`,
+  "navigation-menu": `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="10" width="72" height="20" rx="4" fill="#1e1e24" stroke="#333" stroke-width="1"/><text x="14" y="24" font-size="7" fill="#ccc">Home</text><text x="36" y="24" font-size="7" fill="#3b82f6">About</text><text x="58" y="24" font-size="7" fill="#ccc">Blog</text></svg>`,
+  accordion: `<svg viewBox="0 0 80 40" fill="none"><rect x="4" y="2" width="72" height="12" rx="3" fill="#1e1e24" stroke="#444" stroke-width="1"/><text x="10" y="10" font-size="6" fill="#ccc">Section 1</text><polyline points="68,6 72,10 68,14" fill="none" stroke="#666" stroke-width="1"/><rect x="4" y="16" width="72" height="12" rx="3" fill="#1e1e24" stroke="#3b82f6" stroke-width="1"/><text x="10" y="24" font-size="6" fill="#3b82f6">Section 2</text><polyline points="68,19 72,23 68,27" fill="none" stroke="#3b82f6" stroke-width="1" transform="rotate(90 70 23)"/></svg>`,
+  popover: `<svg viewBox="0 0 80 40" fill="none"><rect x="12" y="6" width="56" height="28" rx="4" fill="#1e1e24" stroke="#444" stroke-width="1"/><polygon points="28,34 34,40 40,34" fill="#1e1e24" stroke="#444" stroke-width="1" stroke-linejoin="round"/><rect x="18" y="12" width="32" height="3" rx="1" fill="#888"/><rect x="18" y="20" width="44" height="2" rx="1" fill="#555"/><rect x="18" y="26" width="28" height="2" rx="1" fill="#555"/></svg>`,
+  form: `<svg viewBox="0 0 80 40" fill="none"><text x="4" y="8" font-size="5" font-weight="600" fill="#888">Name</text><rect x="4" y="10" width="72" height="8" rx="2" fill="none" stroke="#555" stroke-width="1"/><text x="4" y="26" font-size="5" font-weight="600" fill="#888">Email</text><rect x="4" y="28" width="72" height="8" rx="2" fill="none" stroke="#555" stroke-width="1"/></svg>`,
+  calendar: `<svg viewBox="0 0 80 40" fill="none"><rect x="6" y="2" width="68" height="36" rx="3" fill="#1e1e24" stroke="#444" stroke-width="1"/><line x1="6" y1="12" x2="74" y2="12" stroke="#444" stroke-width="1"/><text x="40" y="9" text-anchor="middle" font-size="6" font-weight="600" fill="#ccc">April 2026</text><circle cx="40" cy="24" r="5" fill="#3b82f6"/><text x="40" y="27" text-anchor="middle" font-size="5" fill="white">9</text><text x="20" y="27" text-anchor="middle" font-size="5" fill="#888">7</text><text x="30" y="27" text-anchor="middle" font-size="5" fill="#888">8</text><text x="50" y="27" text-anchor="middle" font-size="5" fill="#888">10</text><text x="60" y="27" text-anchor="middle" font-size="5" fill="#888">11</text></svg>`,
+  // Blocks
+  "login-form": `<svg viewBox="0 0 80 40" fill="none"><rect x="12" y="2" width="56" height="36" rx="4" fill="#1e1e24" stroke="#333" stroke-width="1"/><rect x="18" y="6" width="32" height="3" rx="1" fill="#888"/><rect x="18" y="12" width="44" height="6" rx="2" fill="none" stroke="#555" stroke-width="1"/><rect x="18" y="22" width="44" height="6" rx="2" fill="none" stroke="#555" stroke-width="1"/><rect x="18" y="32" width="44" height="5" rx="2" fill="#3b82f6"/></svg>`,
+  "hero-section": `<svg viewBox="0 0 80 40" fill="none"><rect x="16" y="4" width="48" height="5" rx="1" fill="#ccc"/><rect x="20" y="12" width="40" height="3" rx="1" fill="#666"/><rect x="24" y="18" width="32" height="3" rx="1" fill="#666"/><rect x="28" y="26" width="24" height="8" rx="4" fill="#3b82f6"/></svg>`,
+  "nav-bar": `<svg viewBox="0 0 80 40" fill="none"><rect x="2" y="10" width="76" height="20" rx="4" fill="#1e1e24" stroke="#333" stroke-width="1"/><circle cx="14" cy="20" r="4" fill="#3b82f6"/><text x="30" y="22" font-size="6" fill="#888">Home</text><text x="48" y="22" font-size="6" fill="#888">About</text><rect x="62" y="16" width="12" height="8" rx="3" fill="#3b82f6"/></svg>`,
+  footer: `<svg viewBox="0 0 80 40" fill="none"><line x1="4" y1="4" x2="76" y2="4" stroke="#444" stroke-width="1"/><rect x="4" y="10" width="20" height="3" rx="1" fill="#888"/><rect x="4" y="16" width="16" height="2" rx="1" fill="#555"/><rect x="4" y="20" width="14" height="2" rx="1" fill="#555"/><rect x="32" y="10" width="20" height="3" rx="1" fill="#888"/><rect x="32" y="16" width="16" height="2" rx="1" fill="#555"/><rect x="32" y="20" width="12" height="2" rx="1" fill="#555"/><rect x="4" y="32" width="40" height="2" rx="1" fill="#444"/></svg>`,
+  sidebar: `<svg viewBox="0 0 80 40" fill="none"><rect x="2" y="2" width="24" height="36" rx="3" fill="#1a1a1f" stroke="#333" stroke-width="1"/><rect x="6" y="6" width="16" height="3" rx="1" fill="#888"/><rect x="6" y="14" width="16" height="3" rx="1" fill="#3b82f6"/><rect x="6" y="20" width="16" height="3" rx="1" fill="#444"/><rect x="6" y="26" width="16" height="3" rx="1" fill="#444"/><rect x="30" y="2" width="48" height="36" rx="3" fill="none" stroke="#333" stroke-width="1"/></svg>`,
+  dashboard: `<svg viewBox="0 0 80 40" fill="none"><rect x="2" y="2" width="36" height="18" rx="3" fill="#1e1e24" stroke="#333" stroke-width="1"/><rect x="6" y="6" width="12" height="3" rx="1" fill="#888"/><rect x="6" y="12" width="20" height="5" rx="1" fill="#3b82f6"/><rect x="42" y="2" width="36" height="18" rx="3" fill="#1e1e24" stroke="#333" stroke-width="1"/><rect x="46" y="6" width="12" height="3" rx="1" fill="#888"/><rect x="46" y="12" width="20" height="5" rx="1" fill="#22c55e"/><rect x="2" y="22" width="76" height="16" rx="3" fill="#1e1e24" stroke="#333" stroke-width="1"/></svg>`,
+  "pricing-table": `<svg viewBox="0 0 80 40" fill="none"><rect x="2" y="2" width="24" height="36" rx="3" fill="#1e1e24" stroke="#333" stroke-width="1"/><rect x="28" y="2" width="24" height="36" rx="3" fill="#1e1e24" stroke="#3b82f6" stroke-width="1.5"/><rect x="54" y="2" width="24" height="36" rx="3" fill="#1e1e24" stroke="#333" stroke-width="1"/><text x="14" y="12" text-anchor="middle" font-size="5" fill="#888">Basic</text><text x="40" y="12" text-anchor="middle" font-size="5" fill="#3b82f6">Pro</text><text x="66" y="12" text-anchor="middle" font-size="5" fill="#888">Team</text><text x="14" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#ccc">$9</text><text x="40" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#ccc">$19</text><text x="66" y="22" text-anchor="middle" font-size="7" font-weight="700" fill="#ccc">$49</text></svg>`,
+};
+
+/** Get a thumbnail SVG for a component/block, or a generic fallback. */
+function getThumbnail(name: string): string {
+  const key = name.toLowerCase().replace(/\s+/g, "-");
+  if (THUMBNAILS[key]) return THUMBNAILS[key];
+  // Generic component icon
+  return `<svg viewBox="0 0 80 40" fill="none"><rect x="16" y="6" width="48" height="28" rx="4" fill="#1e1e24" stroke="#444" stroke-width="1" stroke-dasharray="4 2"/><text x="40" y="24" text-anchor="middle" font-size="7" fill="#666">&lt;${name.split(" ")[0]} /&gt;</text></svg>`;
+}
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
 const PANEL_STYLES = `
   .palette-panel {
     position: fixed;
-    left: 68px;
+    right: 0;
     top: 0;
     height: 100vh;
-    width: 260px;
+    width: 280px;
     background: ${COLORS.bgPrimary};
-    border-right: 1px solid ${COLORS.border};
+    border-left: 1px solid ${COLORS.border};
     box-shadow: ${SHADOWS.lg};
     z-index: 2147483644;
     font-family: ${FONT_FAMILY};
-    display: flex;
+    display: none;
     flex-direction: column;
-    transform: translateX(-100%);
-    transition: transform ${TRANSITIONS.settle};
     user-select: none;
     overflow: hidden;
+    opacity: 0;
+    transform: translateX(12px);
+    transition: opacity 150ms ease, transform 150ms ease;
   }
   .palette-panel.visible {
+    display: flex;
+    opacity: 1;
     transform: translateX(0);
   }
   .palette-header {
@@ -193,76 +244,89 @@ const PANEL_STYLES = `
     color: ${COLORS.textTertiary};
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    padding: 8px 12px 4px;
+    padding: 10px 12px 6px;
   }
-  .palette-item {
+  /* Grid layout for component cards */
+  .palette-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 0 10px 4px;
+  }
+  .palette-card {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    cursor: pointer;
-    gap: 8px;
-    transition: background ${TRANSITIONS.fast};
-    min-height: 30px;
-  }
-  .palette-item:hover {
+    flex-direction: column;
+    border: 1px solid ${COLORS.border};
+    border-radius: ${RADII.sm};
     background: ${COLORS.bgSecondary};
-  }
-  .palette-item-name {
-    font-size: 12px;
-    color: ${COLORS.textPrimary};
-    font-weight: 500;
-    flex: 1;
-    min-width: 0;
+    cursor: pointer;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
   }
-  .palette-item-expand {
-    width: 16px;
-    height: 16px;
+  .palette-card:hover {
+    border-color: ${COLORS.accent};
+    background: ${COLORS.bgTertiary};
+    box-shadow: 0 0 0 1px ${COLORS.accent};
+  }
+  .palette-card-preview {
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: ${COLORS.textTertiary};
-    flex-shrink: 0;
-    transition: transform ${TRANSITIONS.fast}, color ${TRANSITIONS.fast};
+    padding: 4px;
+    overflow: hidden;
   }
-  .palette-item-expand.open {
-    transform: rotate(90deg);
-    color: ${COLORS.accent};
+  .palette-card-preview svg {
+    width: 100%;
+    height: 100%;
   }
-  .palette-variants {
-    display: none;
-    background: ${COLORS.bgSecondary};
+  .palette-card-name {
+    font-size: 10px;
+    color: ${COLORS.textSecondary};
+    padding: 4px 6px;
     border-top: 1px solid ${COLORS.border};
-    border-bottom: 1px solid ${COLORS.border};
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    font-weight: 500;
   }
-  .palette-variants.open {
+  .palette-card:hover .palette-card-name {
+    color: ${COLORS.textPrimary};
+  }
+  /* Variant drawer within card */
+  .palette-card-variants {
+    display: none;
+    border-top: 1px solid ${COLORS.border};
+    background: ${COLORS.bgPrimary};
+  }
+  .palette-card-variants.open {
     display: block;
   }
   .palette-variant-item {
     display: flex;
     align-items: center;
-    padding: 5px 12px 5px 28px;
+    padding: 4px 8px;
     cursor: pointer;
     transition: background ${TRANSITIONS.fast};
-    gap: 6px;
-    min-height: 26px;
+    gap: 4px;
   }
   .palette-variant-item:hover {
     background: ${COLORS.bgTertiary};
   }
   .palette-variant-dot {
-    width: 5px;
-    height: 5px;
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
     background: ${COLORS.textTertiary};
     flex-shrink: 0;
   }
   .palette-variant-name {
-    font-size: 11px;
+    font-size: 9px;
     color: ${COLORS.textSecondary};
+  }
+  .palette-variant-item:hover .palette-variant-name {
+    color: ${COLORS.textPrimary};
   }
   .palette-empty {
     padding: 24px 12px;
@@ -283,37 +347,41 @@ const PANEL_STYLES = `
 // ---------------------------------------------------------------------------
 
 const DEFAULT_COMPONENT_ITEMS: PaletteItem[] = [
-  // Form
-  { name: "Button", category: "Form", type: "component" },
-  { name: "Input", category: "Form", type: "component" },
-  { name: "Textarea", category: "Form", type: "component" },
-  { name: "Select", category: "Form", type: "component" },
-  { name: "Checkbox", category: "Form", type: "component" },
-  { name: "Label", category: "Form", type: "component" },
-  // Feedback
-  { name: "Alert", category: "Feedback", type: "component" },
-  { name: "Badge", category: "Feedback", type: "component" },
-  { name: "Toast", category: "Feedback", type: "component" },
-  // Layout
-  { name: "Card", category: "Layout", type: "component" },
+  { name: "Button", category: "Inputs", type: "component" },
+  { name: "Input", category: "Inputs", type: "component" },
+  { name: "Textarea", category: "Inputs", type: "component" },
+  { name: "Select", category: "Inputs", type: "component" },
+  { name: "Checkbox", category: "Inputs", type: "component" },
+  { name: "Switch", category: "Inputs", type: "component" },
+  { name: "Slider", category: "Inputs", type: "component" },
+  { name: "Label", category: "Inputs", type: "component" },
+  { name: "Calendar", category: "Inputs", type: "component" },
+  { name: "Form", category: "Inputs", type: "component" },
+  { name: "Card", category: "Display", type: "component" },
+  { name: "Badge", category: "Display", type: "component" },
+  { name: "Avatar", category: "Display", type: "component" },
+  { name: "Skeleton", category: "Display", type: "component" },
+  { name: "Table", category: "Data", type: "component" },
+  { name: "Tabs", category: "Navigation", type: "component" },
+  { name: "Accordion", category: "Display", type: "component" },
   { name: "Separator", category: "Layout", type: "component" },
-  { name: "Tabs", category: "Layout", type: "component" },
-  // Navigation
-  { name: "Avatar", category: "Navigation", type: "component" },
+  { name: "Alert", category: "Feedback", type: "component" },
+  { name: "Toast", category: "Feedback", type: "component" },
+  { name: "Dialog", category: "Feedback", type: "component" },
+  { name: "Progress", category: "Feedback", type: "component" },
+  { name: "Popover", category: "Display", type: "component" },
   { name: "Dropdown", category: "Navigation", type: "component" },
+  { name: "Navigation Menu", category: "Navigation", type: "component" },
 ];
 
 const DEFAULT_BLOCK_ITEMS: PaletteItem[] = [
+  { name: "Login Form", category: "Authentication", type: "block" },
   { name: "Hero Section", category: "Marketing", type: "block" },
-  { name: "Feature Grid", category: "Marketing", type: "block" },
-  { name: "Pricing Table", category: "Marketing", type: "block" },
-  { name: "Testimonials", category: "Marketing", type: "block" },
-  { name: "Contact Form", category: "Forms", type: "block" },
-  { name: "Login Form", category: "Forms", type: "block" },
-  { name: "Stats Row", category: "Content", type: "block" },
-  { name: "Team Grid", category: "Content", type: "block" },
   { name: "Nav Bar", category: "Navigation", type: "block" },
   { name: "Footer", category: "Navigation", type: "block" },
+  { name: "Sidebar", category: "Dashboard", type: "block" },
+  { name: "Dashboard", category: "Dashboard", type: "block" },
+  { name: "Pricing Table", category: "Marketing", type: "block" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -330,17 +398,14 @@ export function createPalettePanel(
   isVisible: () => boolean;
   getInsertPosition: () => InsertPosition;
 } {
-  // Inject styles
   const style = document.createElement("style");
   style.textContent = PANEL_STYLES;
   shadowRoot.appendChild(style);
 
-  // Panel element
   const panel = document.createElement("div");
   panel.className = "palette-panel";
   shadowRoot.appendChild(panel);
 
-  // Prevent interaction layer events from propagating through the panel
   panel.addEventListener("pointerdown", (e) => e.stopPropagation());
   panel.addEventListener("mousedown", (e) => e.stopPropagation());
   panel.addEventListener("click", (e) => e.stopPropagation());
@@ -356,7 +421,6 @@ export function createPalettePanel(
   let insertPosition: InsertPosition = "inside";
   let allComponents: PaletteItem[] = DEFAULT_COMPONENT_ITEMS;
   let allBlocks: PaletteItem[] = DEFAULT_BLOCK_ITEMS;
-  let expandedItems: Set<string> = new Set();
   let registryLoaded = false;
 
   // ---------------------------------------------------------------------------
@@ -379,7 +443,6 @@ export function createPalettePanel(
     searchQuery = searchInput.value.trim().toLowerCase();
     renderContent();
   });
-  // Prevent keyboard shortcuts from firing while searching
   searchInput.addEventListener("keydown", (e) => {
     e.stopPropagation();
     if (e.key === "Escape") {
@@ -391,7 +454,6 @@ export function createPalettePanel(
   });
   header.appendChild(searchInput);
 
-  // Tabs
   const tabsEl = document.createElement("div");
   tabsEl.className = "palette-tabs";
 
@@ -408,7 +470,6 @@ export function createPalettePanel(
   tabsEl.appendChild(tabComponents);
   tabsEl.appendChild(tabBlocks);
   header.appendChild(tabsEl);
-
   panel.appendChild(header);
 
   // Position picker
@@ -450,7 +511,6 @@ export function createPalettePanel(
     activeTab = tab;
     tabComponents.classList.toggle("active", tab === "components");
     tabBlocks.classList.toggle("active", tab === "blocks");
-    expandedItems.clear();
     renderContent();
   }
 
@@ -483,54 +543,43 @@ export function createPalettePanel(
       catHeader.textContent = category;
       contentEl.appendChild(catHeader);
 
+      const grid = document.createElement("div");
+      grid.className = "palette-grid";
+
       for (const item of categoryItems) {
-        renderItem(item);
+        renderCard(grid, item);
       }
+
+      contentEl.appendChild(grid);
     }
   }
 
-  function renderItem(item: PaletteItem): void {
+  function renderCard(grid: HTMLElement, item: PaletteItem): void {
     const itemKey = item.name.toLowerCase();
     const variants = activeTab === "components" ? COMPONENT_VARIANTS[itemKey] : undefined;
     const hasVariants = !!variants && variants.length > 0;
-    const isExpanded = expandedItems.has(item.name);
 
-    const itemEl = document.createElement("div");
-    itemEl.className = "palette-item";
+    const card = document.createElement("div");
+    card.className = "palette-card";
 
-    const nameEl = document.createElement("span");
-    nameEl.className = "palette-item-name";
+    // Thumbnail preview
+    const preview = document.createElement("div");
+    preview.className = "palette-card-preview";
+    preview.innerHTML = getThumbnail(item.name);
+    card.appendChild(preview);
+
+    // Name label
+    const nameEl = document.createElement("div");
+    nameEl.className = "palette-card-name";
     nameEl.textContent = item.name;
-    itemEl.appendChild(nameEl);
+    card.appendChild(nameEl);
 
     if (hasVariants) {
-      const expandEl = document.createElement("span");
-      expandEl.className = `palette-item-expand${isExpanded ? " open" : ""}`;
-      expandEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9,6 15,12 9,18"/></svg>`;
-      itemEl.appendChild(expandEl);
-
-      itemEl.addEventListener("click", () => {
-        if (expandedItems.has(item.name)) {
-          expandedItems.delete(item.name);
-        } else {
-          expandedItems.add(item.name);
-        }
-        renderContent();
-      });
-    } else {
-      itemEl.addEventListener("click", () => {
-        callbacks.onInsert(item, undefined);
-      });
-    }
-
-    contentEl.appendChild(itemEl);
-
-    // Render variants if expanded
-    if (hasVariants && isExpanded && variants) {
+      // Variants drawer
       const variantsEl = document.createElement("div");
-      variantsEl.className = "palette-variants open";
+      variantsEl.className = "palette-card-variants";
 
-      for (const variant of variants) {
+      for (const variant of variants!) {
         const variantEl = document.createElement("div");
         variantEl.className = "palette-variant-item";
 
@@ -543,15 +592,33 @@ export function createPalettePanel(
         variantName.textContent = variant.name;
         variantEl.appendChild(variantName);
 
-        variantEl.addEventListener("click", () => {
+        variantEl.addEventListener("click", (e) => {
+          e.stopPropagation();
           callbacks.onInsert(item, variant);
         });
 
         variantsEl.appendChild(variantEl);
       }
 
-      contentEl.appendChild(variantsEl);
+      card.appendChild(variantsEl);
+
+      // Click card to toggle variants
+      card.addEventListener("click", () => {
+        const isOpen = variantsEl.classList.contains("open");
+        // Close all other variant drawers
+        grid.querySelectorAll(".palette-card-variants.open").forEach((el) => {
+          if (el !== variantsEl) el.classList.remove("open");
+        });
+        variantsEl.classList.toggle("open", !isOpen);
+      });
+    } else {
+      // No variants — click to insert directly
+      card.addEventListener("click", () => {
+        callbacks.onInsert(item, undefined);
+      });
     }
+
+    grid.appendChild(card);
   }
 
   // ---------------------------------------------------------------------------
@@ -564,7 +631,7 @@ export function createPalettePanel(
       const registry = await requestComponentRegistry();
       if (registry.components && registry.components.length > 0) {
         allComponents = registry.components.map((c: any) => ({
-          name: c.name ?? c.displayName ?? String(c),
+          name: c.displayName ?? c.name ?? String(c),
           category: c.category ?? "Components",
           type: "component" as const,
           props: c.props,
@@ -572,7 +639,7 @@ export function createPalettePanel(
       }
       if (registry.blocks && registry.blocks.length > 0) {
         allBlocks = registry.blocks.map((b: any) => ({
-          name: b.name ?? b.displayName ?? String(b),
+          name: b.displayName ?? b.name ?? String(b),
           category: b.category ?? "Blocks",
           type: "block" as const,
         }));
@@ -580,7 +647,6 @@ export function createPalettePanel(
       registryLoaded = true;
       renderContent();
     } catch {
-      // Fall back to defaults — already rendered
       registryLoaded = true;
     }
   }
@@ -592,6 +658,7 @@ export function createPalettePanel(
   function show(): void {
     if (visible) return;
     visible = true;
+    panel.style.display = "flex";
     panel.offsetHeight; // force reflow
     panel.classList.add("visible");
     renderContent();
@@ -602,15 +669,15 @@ export function createPalettePanel(
     if (!visible) return;
     visible = false;
     panel.classList.remove("visible");
+    setTimeout(() => {
+      if (!visible) panel.style.display = "none";
+    }, 160);
   }
 
   function toggle(): void {
     if (visible) hide();
     else show();
   }
-
-  // Initial render (hidden)
-  renderContent();
 
   return {
     show,
