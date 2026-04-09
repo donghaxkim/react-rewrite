@@ -35,6 +35,7 @@ import { isTextEditing } from "./inline-text-edit.js";
 import { copyElement, hasClipboard, pasteElement, isInsideMapTemplate, resolveFromCloneAncestry, getCloneForElement } from "./clone-state.js";
 import { deleteElement } from "./delete-state.js";
 import { addChangeEntry } from "./changelog.js";
+import { showResizeTooltip, hideResizeTooltip, snapToTailwindSize } from "./resize-handles.js";
 
 // Ensure bippy instrumentation is active so we can read fiber info
 if (!isInstrumentationActive()) {
@@ -495,6 +496,12 @@ function handleMouseMove(e: MouseEvent): void {
       preview("width", `${newWidth}px`);
       preview("height", `${newHeight}px`);
       updateSelectionPosition();
+
+      // Show Tailwind snap tooltip
+      const snapW = snapToTailwindSize(newWidth);
+      const snapH = snapToTailwindSize(newHeight);
+      const tooltipText = `w-${snapW.token} (${snapW.snappedPx}px) × h-${snapH.token} (${snapH.snappedPx}px)`;
+      showResizeTooltip(tooltipText, e.clientX, e.clientY);
     }
     return;
   }
@@ -580,6 +587,7 @@ function handleMouseUp(e: MouseEvent): void {
   // Commit resize
   if (prevMode === "resize-drag") {
     document.body.style.cursor = "";
+    hideResizeTooltip();
     resizeDragCorner = null;
     resizeInitialRect = null;
     mouseDownPos = null;
