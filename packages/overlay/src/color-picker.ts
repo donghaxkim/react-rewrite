@@ -205,7 +205,7 @@ export function openColorPicker(opts: ColorPickerOptions): void {
   container.appendChild(hexInput);
 
   // --- Preset swatches ---
-  const presets = ["#000000", "#ffffff", "#e5484d", "#f76b15", "#f5d90a", "#30a46c", "#0091ff", "#a259ff"];
+  const presets = ["#000000", "#ffffff", "#e5484d", "#f76b15", "#f5d90a", "#30a46c", "#0091ff", "#3b82f6"];
   const swatchRow = document.createElement("div");
   swatchRow.style.cssText = "display:flex;gap:4px;justify-content:center;";
   for (const color of presets) {

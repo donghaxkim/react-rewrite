@@ -17,17 +17,21 @@ const RESIZE_HANDLE_WIDTH = 4;
 const SIDEBAR_STYLES = `
   .prop-sidebar {
     position: fixed;
-    top: 0;
-    right: 0;
-    height: 100vh;
-    background: ${COLORS.bgPrimary};
-    border-left: 1px solid ${COLORS.border};
-    box-shadow: ${SHADOWS.lg};
+    top: 12px;
+    right: 12px;
+    height: calc(100vh - 24px);
+    background:
+      linear-gradient(180deg, ${COLORS.glassPanelStrong} 0%, ${COLORS.glassPanel} 100%);
+    border: 1px solid ${COLORS.glassPanelBorder};
+    border-radius: 22px;
+    box-shadow: ${SHADOWS.glass};
+    backdrop-filter: blur(24px) saturate(1.15);
+    -webkit-backdrop-filter: blur(24px) saturate(1.15);
     z-index: 2147483645;
     font-family: ${FONT_FAMILY};
     display: flex;
     flex-direction: column;
-    transform: translateX(100%);
+    transform: translateX(calc(100% + 20px));
     transition: transform ${TRANSITIONS.settle};
     overflow: hidden;
   }
@@ -39,23 +43,24 @@ const SIDEBAR_STYLES = `
     left: 0;
     top: 0;
     bottom: 0;
-    width: ${RESIZE_HANDLE_WIDTH}px;
+    width: 8px;
     cursor: col-resize;
     z-index: 1;
   }
   .prop-sidebar-resize:hover,
   .prop-sidebar-resize.active {
     background: ${COLORS.accent};
-    opacity: 0.3;
+    opacity: 0.18;
   }
   .prop-sidebar-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid ${COLORS.border};
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid rgba(15,23,42,0.08);
     flex-shrink: 0;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 8px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.18) 100%);
   }
   .prop-sidebar-header-info {
     flex: 1;
@@ -76,7 +81,7 @@ const SIDEBAR_STYLES = `
     border-radius: ${RADII.sm};
   }
   .prop-sidebar-close:hover {
-    background: ${COLORS.bgTertiary};
+    background: rgba(255,255,255,0.72);
     color: ${COLORS.textPrimary};
   }
   .prop-sidebar-component-name {
@@ -121,8 +126,8 @@ const SIDEBAR_STYLES = `
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    background: ${COLORS.dangerSoft};
-    border-bottom: 1px solid ${COLORS.danger};
+    background: rgba(229,72,77,0.08);
+    border-bottom: 1px solid rgba(229,72,77,0.22);
     font-family: ${FONT_FAMILY};
     font-size: 11px;
     color: ${COLORS.danger};
@@ -152,6 +157,7 @@ const SIDEBAR_STYLES = `
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.26) 100%);
   }
   .prop-sidebar-content::-webkit-scrollbar {
     width: 6px;
@@ -160,7 +166,7 @@ const SIDEBAR_STYLES = `
     background: transparent;
   }
   .prop-sidebar-content::-webkit-scrollbar-thumb {
-    background: ${COLORS.borderStrong};
+    background: rgba(15,23,42,0.14);
     border-radius: 3px;
   }
 `;

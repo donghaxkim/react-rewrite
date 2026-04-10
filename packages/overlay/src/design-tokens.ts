@@ -5,15 +5,19 @@ export const COLORS = {
   bgPrimary: "#ffffff",
   bgSecondary: "#f7f7f8",
   bgTertiary: "#efefef",
+  glassPanel: "rgba(255,255,255,0.78)",
+  glassPanelStrong: "rgba(255,255,255,0.9)",
+  glassPanelBorder: "rgba(255,255,255,0.58)",
+  glassInset: "rgba(255,255,255,0.55)",
   border: "rgba(0,0,0,0.08)",
   borderStrong: "rgba(0,0,0,0.15)",
   textPrimary: "#1a1a1a",
   textSecondary: "#6b6b6b",
   textTertiary: "#9b9b9b",
-  accent: "#a259ff",
-  accentHover: "#8b3ee0",
-  accentSoft: "rgba(162,89,255,0.08)",
-  accentMedium: "rgba(162,89,255,0.15)",
+  accent: "#3b82f6",
+  accentHover: "#2563eb",
+  accentSoft: "rgba(59,130,246,0.10)",
+  accentMedium: "rgba(59,130,246,0.18)",
   danger: "#e5484d",
   dangerSoft: "rgba(229,72,77,0.08)",
   textOnAccent: "#ffffff",
@@ -21,7 +25,7 @@ export const COLORS = {
   marginBoxBorder: "rgba(200,150,0,0.4)",
   paddingBoxBg: "rgba(100,180,255,0.12)",
   paddingBoxBorder: "rgba(50,120,200,0.35)",
-  focusRing: "rgba(162,89,255,0.25)",
+  focusRing: "rgba(59,130,246,0.24)",
 } as const;
 
 // --- Shadows ---
@@ -29,6 +33,7 @@ export const SHADOWS = {
   sm: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04)",
   md: "0 4px 16px rgba(0,0,0,0.10), 0 1px 4px rgba(0,0,0,0.06)",
   lg: "0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.06)",
+  glass: "0 22px 60px rgba(15,23,42,0.16), 0 10px 24px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.55)",
 } as const;
 
 // --- Border Radius ---

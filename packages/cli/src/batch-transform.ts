@@ -1431,6 +1431,7 @@ export function executeBatch(
             importPath: op.importPath,
             importNames: op.importNames,
             jsxString: op.jsxString,
+            jsxPath: op.jsxPath,
           });
           if (result.success) {
             results[index] = { op: op.op, file, line, success: true };

@@ -1,6 +1,8 @@
 // packages/overlay/src/palette/palette-panel.ts
 import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "../design-tokens.js";
 import { requestComponentRegistry } from "../bridge.js";
+import { invalidateThemeCache } from "./palette-theme.js";
+import { createPalettePreviewElement, hasPalettePreviewBuilder } from "./palette-mount.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -10,6 +12,7 @@ export type InsertPosition = "before" | "inside" | "after";
 
 export interface PaletteItem {
   name: string;
+  registryName: string;
   category: string;
   type: "component" | "block";
   props?: Record<string, string>;
@@ -23,6 +26,11 @@ export interface PaletteVariant {
 export interface PaletteCallbacks {
   onInsert: (item: PaletteItem, variant?: PaletteVariant) => void;
 }
+
+const PANEL_STORAGE_KEY = "react-rewrite-sidebar-width";
+const DEFAULT_WIDTH = 300;
+const MIN_WIDTH = 260;
+const MAX_WIDTH = 380;
 
 // ---------------------------------------------------------------------------
 // Variant definitions
@@ -92,9 +100,47 @@ const THUMBNAILS: Record<string, string> = {
 /** Get a thumbnail SVG for a component/block, or a generic fallback. */
 function getThumbnail(name: string): string {
   const key = name.toLowerCase().replace(/\s+/g, "-");
+  const aliases: Record<string, string> = {
+    "dropdown-menu": "dropdown",
+  };
   if (THUMBNAILS[key]) return THUMBNAILS[key];
+  if (aliases[key] && THUMBNAILS[aliases[key]]) return THUMBNAILS[aliases[key]];
   // Generic component icon
   return `<svg viewBox="0 0 80 40" fill="none"><rect x="16" y="6" width="48" height="28" rx="4" fill="#1e1e24" stroke="#444" stroke-width="1" stroke-dasharray="4 2"/><text x="40" y="24" text-anchor="middle" font-size="7" fill="#666">&lt;${name.split(" ")[0]} /&gt;</text></svg>`;
+}
+
+function getItemKey(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "-");
+}
+function fitPreviewNode(container: HTMLElement, previewNode: HTMLElement): void {
+  requestAnimationFrame(() => {
+    const width = previewNode.offsetWidth || 1;
+    const height = previewNode.offsetHeight || 1;
+    const availableWidth = Math.max(1, container.clientWidth - 12);
+    const availableHeight = Math.max(1, container.clientHeight - 12);
+    const scale = Math.min(1, availableWidth / width, availableHeight / height);
+    previewNode.style.transform = `scale(${scale})`;
+  });
+}
+
+function createPreviewContent(item: PaletteItem): HTMLElement {
+  const key = item.registryName || getItemKey(item.name);
+  const hasBuilder = hasPalettePreviewBuilder(key);
+  if (item.type === "component" && hasBuilder) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "palette-card-preview-dom";
+    const previewNode = createPalettePreviewElement(key);
+    previewNode.style.transformOrigin = "center center";
+    previewNode.style.pointerEvents = "none";
+    wrapper.appendChild(previewNode);
+    fitPreviewNode(wrapper, previewNode);
+    return wrapper;
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "palette-card-preview-thumb";
+  wrapper.innerHTML = getThumbnail(key);
+  return wrapper;
 }
 
 // ---------------------------------------------------------------------------
@@ -104,33 +150,48 @@ function getThumbnail(name: string): string {
 const PANEL_STYLES = `
   .palette-panel {
     position: fixed;
-    right: 0;
-    top: 0;
-    height: 100vh;
-    width: 280px;
-    background: ${COLORS.bgPrimary};
-    border-left: 1px solid ${COLORS.border};
-    box-shadow: ${SHADOWS.lg};
+    right: 12px;
+    top: 12px;
+    height: calc(100vh - 24px);
+    width: ${DEFAULT_WIDTH}px;
+    background:
+      linear-gradient(180deg, ${COLORS.glassPanelStrong} 0%, ${COLORS.glassPanel} 100%);
+    border: 1px solid ${COLORS.glassPanelBorder};
+    border-radius: 22px;
+    box-shadow: ${SHADOWS.glass};
+    backdrop-filter: blur(24px) saturate(1.15);
+    -webkit-backdrop-filter: blur(24px) saturate(1.15);
     z-index: 2147483644;
     font-family: ${FONT_FAMILY};
-    display: none;
+    display: flex;
     flex-direction: column;
     user-select: none;
     overflow: hidden;
     opacity: 0;
-    transform: translateX(12px);
-    transition: opacity 150ms ease, transform 150ms ease;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(24px);
+    transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 150ms;
   }
   .palette-panel.visible {
-    display: flex;
     opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
     transform: translateX(0);
+    transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 0s;
   }
   .palette-header {
-    padding: 12px 12px 0;
+    padding: 14px 14px 0;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
+    gap: 8px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.16) 100%);
+  }
+  .palette-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     gap: 8px;
   }
   .palette-title {
@@ -141,13 +202,31 @@ const PANEL_STYLES = `
     letter-spacing: 0.5px;
     padding: 0 4px;
   }
+  .palette-close {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: ${COLORS.textTertiary};
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: ${RADII.sm};
+  }
+  .palette-close:hover {
+    background: rgba(255,255,255,0.72);
+    color: ${COLORS.textPrimary};
+  }
   .palette-search {
     width: 100%;
-    height: 30px;
-    background: ${COLORS.bgSecondary};
-    border: 1px solid ${COLORS.border};
-    border-radius: ${RADII.sm};
-    padding: 0 10px;
+    height: 34px;
+    background: rgba(255,255,255,0.62);
+    border: 1px solid rgba(15,23,42,0.08);
+    border-radius: ${RADII.md};
+    padding: 0 12px;
     font-size: 12px;
     font-family: ${FONT_FAMILY};
     color: ${COLORS.textPrimary};
@@ -160,50 +239,54 @@ const PANEL_STYLES = `
   }
   .palette-search:focus {
     border-color: ${COLORS.accent};
-    background: ${COLORS.bgPrimary};
+    background: rgba(255,255,255,0.92);
+    box-shadow: 0 0 0 4px ${COLORS.focusRing};
   }
   .palette-tabs {
     display: flex;
-    gap: 0;
-    border-bottom: 1px solid ${COLORS.border};
-    padding: 0 4px;
+    gap: 4px;
+    border-bottom: 1px solid rgba(15,23,42,0.06);
+    padding: 2px 0 10px;
   }
   .palette-tab {
     flex: 1;
     height: 30px;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
+    background: rgba(255,255,255,0.34);
+    border: 1px solid transparent;
+    border-radius: ${RADII.md};
     color: ${COLORS.textSecondary};
     font-size: 12px;
     font-family: ${FONT_FAMILY};
     font-weight: 500;
     cursor: pointer;
     padding: 0;
-    margin-bottom: -1px;
-    transition: color ${TRANSITIONS.fast}, border-color ${TRANSITIONS.fast};
+    transition: color ${TRANSITIONS.fast}, border-color ${TRANSITIONS.fast}, background ${TRANSITIONS.fast}, box-shadow ${TRANSITIONS.fast};
   }
   .palette-tab:hover {
     color: ${COLORS.textPrimary};
+    background: rgba(255,255,255,0.56);
   }
   .palette-tab.active {
-    color: ${COLORS.accent};
-    border-bottom-color: ${COLORS.accent};
+    color: ${COLORS.accentHover};
+    background: rgba(255,255,255,0.92);
+    border-color: ${COLORS.accentMedium};
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.72), 0 0 0 1px ${COLORS.accentSoft};
     font-weight: 600;
   }
   .palette-position-picker {
     display: flex;
     gap: 4px;
-    padding: 8px 12px;
-    border-bottom: 1px solid ${COLORS.border};
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(15,23,42,0.06);
     flex-shrink: 0;
+    background: rgba(255,255,255,0.18);
   }
   .palette-pos-btn {
     flex: 1;
-    height: 24px;
-    background: ${COLORS.bgSecondary};
-    border: 1px solid ${COLORS.border};
-    border-radius: ${RADII.xs};
+    height: 28px;
+    background: rgba(255,255,255,0.44);
+    border: 1px solid rgba(15,23,42,0.08);
+    border-radius: ${RADII.md};
     color: ${COLORS.textSecondary};
     font-size: 10px;
     font-family: ${FONT_FAMILY};
@@ -214,19 +297,24 @@ const PANEL_STYLES = `
   }
   .palette-pos-btn:hover {
     color: ${COLORS.textPrimary};
-    background: ${COLORS.bgTertiary};
+    background: rgba(255,255,255,0.72);
+  }
+  .palette-pos-btn:active {
+    transform: scale(0.95);
   }
   .palette-pos-btn.active {
-    background: ${COLORS.accentSoft};
-    border-color: ${COLORS.accent};
-    color: ${COLORS.accent};
+    background: rgba(255,255,255,0.92);
+    border-color: ${COLORS.accentMedium};
+    color: ${COLORS.accentHover};
+    box-shadow: 0 0 0 1px ${COLORS.accentSoft};
     font-weight: 600;
   }
   .palette-content {
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 8px 0;
+    padding: 10px 0 12px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.26) 100%);
   }
   .palette-content::-webkit-scrollbar {
     width: 4px;
@@ -235,7 +323,7 @@ const PANEL_STYLES = `
     background: transparent;
   }
   .palette-content::-webkit-scrollbar-thumb {
-    background: ${COLORS.borderStrong};
+    background: rgba(15,23,42,0.14);
     border-radius: 2px;
   }
   .palette-category-header {
@@ -244,47 +332,71 @@ const PANEL_STYLES = `
     color: ${COLORS.textTertiary};
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    padding: 10px 12px 6px;
+    padding: 12px 14px 8px;
   }
   /* Grid layout for component cards */
   .palette-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    padding: 0 10px 4px;
+    gap: 8px;
+    padding: 0 14px 6px;
   }
   .palette-card {
     display: flex;
     flex-direction: column;
-    border: 1px solid ${COLORS.border};
-    border-radius: ${RADII.sm};
-    background: ${COLORS.bgSecondary};
+    border: 1px solid rgba(15,23,42,0.08);
+    border-radius: ${RADII.md};
+    background: rgba(255,255,255,0.62);
     cursor: pointer;
     overflow: hidden;
-    transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.05), inset 0 1px 0 rgba(255,255,255,0.55);
+    transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
   }
   .palette-card:hover {
-    border-color: ${COLORS.accent};
-    background: ${COLORS.bgTertiary};
-    box-shadow: 0 0 0 1px ${COLORS.accent};
+    border-color: rgba(15,23,42,0.12);
+    background: rgba(255,255,255,0.86);
+    box-shadow: 0 12px 28px rgba(15,23,42,0.1), inset 0 1px 0 rgba(255,255,255,0.65);
+  }
+  .palette-card:active {
+    transform: scale(0.98);
   }
   .palette-card-preview {
-    height: 52px;
+    height: 92px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: 8px;
     overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5) 0%, rgba(246,247,249,0.94) 100%);
   }
   .palette-card-preview svg {
     width: 100%;
     height: 100%;
   }
+  .palette-card-preview-thumb {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .palette-card-preview-thumb svg {
+    width: 100%;
+    height: 100%;
+  }
+  .palette-card-preview-dom {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
   .palette-card-name {
-    font-size: 10px;
+    font-size: 11px;
     color: ${COLORS.textSecondary};
-    padding: 4px 6px;
-    border-top: 1px solid ${COLORS.border};
+    padding: 8px 8px 9px;
+    border-top: 1px solid rgba(15,23,42,0.06);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -297,8 +409,8 @@ const PANEL_STYLES = `
   /* Variant drawer within card */
   .palette-card-variants {
     display: none;
-    border-top: 1px solid ${COLORS.border};
-    background: ${COLORS.bgPrimary};
+    border-top: 1px solid rgba(15,23,42,0.06);
+    background: rgba(255,255,255,0.88);
   }
   .palette-card-variants.open {
     display: block;
@@ -312,7 +424,7 @@ const PANEL_STYLES = `
     gap: 4px;
   }
   .palette-variant-item:hover {
-    background: ${COLORS.bgTertiary};
+    background: rgba(255,255,255,0.74);
   }
   .palette-variant-dot {
     width: 4px;
@@ -329,59 +441,74 @@ const PANEL_STYLES = `
     color: ${COLORS.textPrimary};
   }
   .palette-empty {
-    padding: 24px 12px;
+    padding: 24px 16px;
     text-align: center;
     font-size: 12px;
     color: ${COLORS.textTertiary};
   }
   .palette-loading {
-    padding: 24px 12px;
+    padding: 24px 16px;
     text-align: center;
     font-size: 12px;
     color: ${COLORS.textTertiary};
   }
 `;
 
+function loadPanelWidth(): number {
+  try {
+    const stored = localStorage.getItem(PANEL_STORAGE_KEY);
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (!Number.isNaN(parsed) && parsed >= MIN_WIDTH && parsed <= MAX_WIDTH) {
+        return parsed;
+      }
+    }
+  } catch {
+    // ignore localStorage failures
+  }
+  return DEFAULT_WIDTH;
+}
+
 // ---------------------------------------------------------------------------
 // Default items (fallback when registry is empty)
 // ---------------------------------------------------------------------------
 
 const DEFAULT_COMPONENT_ITEMS: PaletteItem[] = [
-  { name: "Button", category: "Inputs", type: "component" },
-  { name: "Input", category: "Inputs", type: "component" },
-  { name: "Textarea", category: "Inputs", type: "component" },
-  { name: "Select", category: "Inputs", type: "component" },
-  { name: "Checkbox", category: "Inputs", type: "component" },
-  { name: "Switch", category: "Inputs", type: "component" },
-  { name: "Slider", category: "Inputs", type: "component" },
-  { name: "Label", category: "Inputs", type: "component" },
-  { name: "Calendar", category: "Inputs", type: "component" },
-  { name: "Form", category: "Inputs", type: "component" },
-  { name: "Card", category: "Display", type: "component" },
-  { name: "Badge", category: "Display", type: "component" },
-  { name: "Avatar", category: "Display", type: "component" },
-  { name: "Skeleton", category: "Display", type: "component" },
-  { name: "Table", category: "Data", type: "component" },
-  { name: "Tabs", category: "Navigation", type: "component" },
-  { name: "Accordion", category: "Display", type: "component" },
-  { name: "Separator", category: "Layout", type: "component" },
-  { name: "Alert", category: "Feedback", type: "component" },
-  { name: "Toast", category: "Feedback", type: "component" },
-  { name: "Dialog", category: "Feedback", type: "component" },
-  { name: "Progress", category: "Feedback", type: "component" },
-  { name: "Popover", category: "Display", type: "component" },
-  { name: "Dropdown", category: "Navigation", type: "component" },
-  { name: "Navigation Menu", category: "Navigation", type: "component" },
+  { name: "Button", registryName: "button", category: "Inputs", type: "component" },
+  { name: "Input", registryName: "input", category: "Inputs", type: "component" },
+  { name: "Textarea", registryName: "textarea", category: "Inputs", type: "component" },
+  { name: "Select", registryName: "select", category: "Inputs", type: "component" },
+  { name: "Checkbox", registryName: "checkbox", category: "Inputs", type: "component" },
+  { name: "Switch", registryName: "switch", category: "Inputs", type: "component" },
+  { name: "Slider", registryName: "slider", category: "Inputs", type: "component" },
+  { name: "Label", registryName: "label", category: "Inputs", type: "component" },
+  { name: "Calendar", registryName: "calendar", category: "Inputs", type: "component" },
+  { name: "Form", registryName: "form", category: "Inputs", type: "component" },
+  { name: "Card", registryName: "card", category: "Display", type: "component" },
+  { name: "Badge", registryName: "badge", category: "Display", type: "component" },
+  { name: "Avatar", registryName: "avatar", category: "Display", type: "component" },
+  { name: "Skeleton", registryName: "skeleton", category: "Display", type: "component" },
+  { name: "Table", registryName: "table", category: "Data", type: "component" },
+  { name: "Tabs", registryName: "tabs", category: "Navigation", type: "component" },
+  { name: "Accordion", registryName: "accordion", category: "Display", type: "component" },
+  { name: "Separator", registryName: "separator", category: "Layout", type: "component" },
+  { name: "Alert", registryName: "alert", category: "Feedback", type: "component" },
+  { name: "Toast", registryName: "toast", category: "Feedback", type: "component" },
+  { name: "Dialog", registryName: "dialog", category: "Feedback", type: "component" },
+  { name: "Progress", registryName: "progress", category: "Feedback", type: "component" },
+  { name: "Popover", registryName: "popover", category: "Display", type: "component" },
+  { name: "Dropdown", registryName: "dropdown-menu", category: "Navigation", type: "component" },
+  { name: "Navigation Menu", registryName: "navigation-menu", category: "Navigation", type: "component" },
 ];
 
 const DEFAULT_BLOCK_ITEMS: PaletteItem[] = [
-  { name: "Login Form", category: "Authentication", type: "block" },
-  { name: "Hero Section", category: "Marketing", type: "block" },
-  { name: "Nav Bar", category: "Navigation", type: "block" },
-  { name: "Footer", category: "Navigation", type: "block" },
-  { name: "Sidebar", category: "Dashboard", type: "block" },
-  { name: "Dashboard", category: "Dashboard", type: "block" },
-  { name: "Pricing Table", category: "Marketing", type: "block" },
+  { name: "Login Form", registryName: "login-form", category: "Authentication", type: "block" },
+  { name: "Hero Section", registryName: "hero-section", category: "Marketing", type: "block" },
+  { name: "Nav Bar", registryName: "nav-bar", category: "Navigation", type: "block" },
+  { name: "Footer", registryName: "footer", category: "Navigation", type: "block" },
+  { name: "Sidebar", registryName: "sidebar", category: "Dashboard", type: "block" },
+  { name: "Dashboard", registryName: "dashboard", category: "Dashboard", type: "block" },
+  { name: "Pricing Table", registryName: "pricing-table", category: "Marketing", type: "block" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -404,12 +531,12 @@ export function createPalettePanel(
 
   const panel = document.createElement("div");
   panel.className = "palette-panel";
+  panel.style.width = `${loadPanelWidth()}px`;
   shadowRoot.appendChild(panel);
 
   panel.addEventListener("pointerdown", (e) => e.stopPropagation());
   panel.addEventListener("mousedown", (e) => e.stopPropagation());
   panel.addEventListener("click", (e) => e.stopPropagation());
-  panel.addEventListener("mouseup", (e) => e.stopPropagation());
 
   // ---------------------------------------------------------------------------
   // State
@@ -430,18 +557,35 @@ export function createPalettePanel(
   const header = document.createElement("div");
   header.className = "palette-header";
 
+  const headerTop = document.createElement("div");
+  headerTop.className = "palette-header-top";
+
   const titleEl = document.createElement("div");
   titleEl.className = "palette-title";
   titleEl.textContent = "Components";
-  header.appendChild(titleEl);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "palette-close";
+  closeBtn.title = "Close components";
+  closeBtn.setAttribute("aria-label", "Close components");
+  closeBtn.innerHTML = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 3l6 6"/><path d="M9 3 3 9"/></svg>`;
+
+  headerTop.appendChild(titleEl);
+  headerTop.appendChild(closeBtn);
+  header.appendChild(headerTop);
+
+  let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
   const searchInput = document.createElement("input");
   searchInput.type = "text";
   searchInput.className = "palette-search";
   searchInput.placeholder = "Search...";
   searchInput.addEventListener("input", () => {
-    searchQuery = searchInput.value.trim().toLowerCase();
-    renderContent();
+    if (searchDebounce) clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      searchQuery = searchInput.value.trim().toLowerCase();
+      renderContent();
+    }, 80);
   });
   searchInput.addEventListener("keydown", (e) => {
     e.stopPropagation();
@@ -471,6 +615,11 @@ export function createPalettePanel(
   tabsEl.appendChild(tabBlocks);
   header.appendChild(tabsEl);
   panel.appendChild(header);
+
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    hide();
+  });
 
   // Position picker
   const positionPicker = document.createElement("div");
@@ -515,7 +664,7 @@ export function createPalettePanel(
   }
 
   function renderContent(): void {
-    contentEl.innerHTML = "";
+    const fragment = document.createDocumentFragment();
 
     const items = activeTab === "components" ? allComponents : allBlocks;
     const filtered = searchQuery
@@ -526,36 +675,39 @@ export function createPalettePanel(
       const empty = document.createElement("div");
       empty.className = "palette-empty";
       empty.textContent = searchQuery ? `No results for "${searchQuery}"` : "No items available";
-      contentEl.appendChild(empty);
-      return;
-    }
-
-    // Group by category
-    const categories = new Map<string, PaletteItem[]>();
-    for (const item of filtered) {
-      if (!categories.has(item.category)) categories.set(item.category, []);
-      categories.get(item.category)!.push(item);
-    }
-
-    for (const [category, categoryItems] of categories) {
-      const catHeader = document.createElement("div");
-      catHeader.className = "palette-category-header";
-      catHeader.textContent = category;
-      contentEl.appendChild(catHeader);
-
-      const grid = document.createElement("div");
-      grid.className = "palette-grid";
-
-      for (const item of categoryItems) {
-        renderCard(grid, item);
+      fragment.appendChild(empty);
+    } else {
+      // Group by category
+      const categories = new Map<string, PaletteItem[]>();
+      for (const item of filtered) {
+        if (!categories.has(item.category)) categories.set(item.category, []);
+        categories.get(item.category)!.push(item);
       }
 
-      contentEl.appendChild(grid);
+      for (const [category, categoryItems] of categories) {
+        const catHeader = document.createElement("div");
+        catHeader.className = "palette-category-header";
+        catHeader.textContent = category;
+        fragment.appendChild(catHeader);
+
+        const grid = document.createElement("div");
+        grid.className = "palette-grid";
+
+        for (const item of categoryItems) {
+          renderCard(grid, item);
+        }
+
+        fragment.appendChild(grid);
+      }
     }
+
+    // Single DOM swap — no flicker
+    contentEl.innerHTML = "";
+    contentEl.appendChild(fragment);
   }
 
   function renderCard(grid: HTMLElement, item: PaletteItem): void {
-    const itemKey = item.name.toLowerCase();
+    const itemKey = item.registryName;
     const variants = activeTab === "components" ? COMPONENT_VARIANTS[itemKey] : undefined;
     const hasVariants = !!variants && variants.length > 0;
 
@@ -565,7 +717,7 @@ export function createPalettePanel(
     // Thumbnail preview
     const preview = document.createElement("div");
     preview.className = "palette-card-preview";
-    preview.innerHTML = getThumbnail(item.name);
+    preview.appendChild(createPreviewContent(item));
     card.appendChild(preview);
 
     // Name label
@@ -632,6 +784,7 @@ export function createPalettePanel(
       if (registry.components && registry.components.length > 0) {
         allComponents = registry.components.map((c: any) => ({
           name: c.displayName ?? c.name ?? String(c),
+          registryName: c.name ?? getItemKey(c.displayName ?? String(c)),
           category: c.category ?? "Components",
           type: "component" as const,
           props: c.props,
@@ -640,6 +793,7 @@ export function createPalettePanel(
       if (registry.blocks && registry.blocks.length > 0) {
         allBlocks = registry.blocks.map((b: any) => ({
           name: b.displayName ?? b.name ?? String(b),
+          registryName: b.name ?? getItemKey(b.displayName ?? String(b)),
           category: b.category ?? "Blocks",
           type: "block" as const,
         }));
@@ -658,8 +812,8 @@ export function createPalettePanel(
   function show(): void {
     if (visible) return;
     visible = true;
-    panel.style.display = "flex";
-    panel.offsetHeight; // force reflow
+    invalidateThemeCache();
+    panel.style.width = `${loadPanelWidth()}px`;
     panel.classList.add("visible");
     renderContent();
     loadRegistry();
@@ -668,10 +822,12 @@ export function createPalettePanel(
   function hide(): void {
     if (!visible) return;
     visible = false;
+    if (searchDebounce) {
+      clearTimeout(searchDebounce);
+      searchDebounce = null;
+    }
+    searchInput.blur();
     panel.classList.remove("visible");
-    setTimeout(() => {
-      if (!visible) panel.style.display = "none";
-    }, 160);
   }
 
   function toggle(): void {

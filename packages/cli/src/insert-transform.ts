@@ -5,6 +5,8 @@ import * as fs from "node:fs";
 import jscodeshift from "jscodeshift";
 import { getParser, parseSource, findJSXElementAt } from "./transform.js";
 import { logger } from "./logger.js";
+import { resolveJSXPath } from "./jsx-path-resolver.js";
+import type { JSXStructuralPath } from "@react-rewrite/shared";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -16,6 +18,7 @@ export interface InsertOptions {
   importPath: string;
   importNames: string[];
   jsxString: string;
+  jsxPath?: JSXStructuralPath;
 }
 
 export interface InsertResult {
@@ -125,7 +128,9 @@ export function applyInsertComponent(
     ensureImport(j, root, opts.importPath, opts.importNames, quoteStyle);
 
     // 2. Find the target JSX element
-    const target = findJSXElementAt(j, root, opts.line, opts.col);
+    const target =
+      (opts.jsxPath ? resolveJSXPath(j, root, opts.jsxPath) : null) ??
+      findJSXElementAt(j, root, opts.line, opts.col);
     if (!target) {
       return {
         success: false,

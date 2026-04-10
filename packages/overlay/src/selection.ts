@@ -259,11 +259,13 @@ const OVERLAY_STYLES = `
   .selection-label {
     position: fixed;
     pointer-events: none;
-    background: ${COLORS.bgPrimary};
-    border: 1px solid ${COLORS.border};
-    box-shadow: ${SHADOWS.sm};
-    border-radius: ${RADII.sm};
-    padding: 4px 8px;
+    background: linear-gradient(180deg, ${COLORS.glassPanelStrong} 0%, ${COLORS.glassPanel} 100%);
+    border: 1px solid ${COLORS.glassPanelBorder};
+    box-shadow: ${SHADOWS.md};
+    backdrop-filter: blur(18px) saturate(1.1);
+    -webkit-backdrop-filter: blur(18px) saturate(1.1);
+    border-radius: ${RADII.md};
+    padding: 6px 10px;
     z-index: 2147483646;
     font-family: ${FONT_FAMILY};
     white-space: nowrap;
@@ -663,8 +665,8 @@ export async function selectElement(el: HTMLElement, options?: { skipSidebar?: b
         tagName: el.tagName.toLowerCase(),
         componentName: paletteEl.getAttribute("data-palette-component") ?? el.tagName.toLowerCase(),
         filePath: paletteEl.getAttribute("data-palette-file") ?? "",
-        lineNumber: 0,
-        columnNumber: 0,
+        lineNumber: parseInt(paletteEl.getAttribute("data-palette-line") ?? "0", 10) || 0,
+        columnNumber: parseInt(paletteEl.getAttribute("data-palette-col") ?? "0", 10) || 0,
         stack: [],
       };
     } else {

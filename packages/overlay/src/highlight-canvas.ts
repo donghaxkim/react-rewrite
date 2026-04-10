@@ -41,8 +41,8 @@ let selectionAnim: AnimatedRect | null = null;
 let multiAnims: AnimatedRect[] = [];
 
 const ACCENT = COLORS.accent;
-const ACCENT_SOFT = "rgba(162,89,255,0.08)";
-const ACCENT_MEDIUM = "rgba(162,89,255,0.15)";
+const ACCENT_SOFT = COLORS.accentSoft;
+const ACCENT_MEDIUM = COLORS.accentMedium;
 
 // Corner resize handle constants
 const HANDLE_RADIUS = 4;

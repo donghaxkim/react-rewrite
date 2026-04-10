@@ -21,8 +21,9 @@ import { discoverFile } from "./file-discovery.js";
 import { executeBatch } from "./batch-transform.js";
 import { ShadcnProvider } from "./registry/shadcn-provider.js";
 import { getCacheDir, writeCachedIndex, writeCachedItem, readCachedIndex, readCachedItem, isCacheStale } from "./registry/registry-cache.js";
-import { writeComponentFiles } from "./registry/component-writer.js";
 import { compileAllComponents } from "./registry/component-compiler.js";
+import { prepareInsertOperations } from "./registry/insert-preparation.js";
+import { installMissingDependencies } from "./registry/dependency-installer.js";
 
 interface SketchServerOptions {
   port: number;
@@ -349,29 +350,23 @@ export function createSketchServer(portOrOptions: number | SketchServerOptions):
         case "commitBatch": {
           logger.info(`[commitBatch] Received ${msg.operations.length} operations:`, msg.operations.map((o: BatchOperation) => `${o.op}@${o.file}:${o.op === "reorder" ? o.fromLine : o.line}`));
           try {
-            // Pre-commit: write component files for insertComponent operations
-            const insertOps = (msg.operations as BatchOperation[]).filter(
-              (op): op is Extract<BatchOperation, { op: "insertComponent" }> => op.op === "insertComponent"
+            const projectConfig = detectProjectConfig(projectRoot);
+            const preparedBatch = await prepareInsertOperations(
+              msg.operations,
+              projectRoot,
+              projectConfig,
+              registryItemCache,
             );
-            if (insertOps.length > 0) {
-              const projectConfig = detectProjectConfig(projectRoot);
-              for (const op of insertOps) {
-                const item = registryItemCache.get(op.registryName);
-                if (item) {
-                  try {
-                    writeComponentFiles(item, projectConfig);
-                    for (const dep of item.registryDependencies) {
-                      const depItem = registryItemCache.get(dep);
-                      if (depItem) writeComponentFiles(depItem, projectConfig);
-                    }
-                  } catch (err) {
-                    logger.error(`[commitBatch] Failed to write component files for ${op.registryName}:`, err);
-                  }
-                }
+            const preparedOperations = preparedBatch.operations;
+
+            if (preparedBatch.packageSpecs.length > 0) {
+              const installResult = installMissingDependencies(projectConfig, preparedBatch.packageSpecs);
+              if (installResult.installed.length > 0) {
+                logger.info(`[commitBatch] Installed dependencies: ${installResult.installed.join(", ")}`);
               }
             }
 
-            const batchResult = executeBatch(msg.operations, projectRoot);
+            const batchResult = executeBatch(preparedOperations, projectRoot);
             const failedOps = batchResult.results.filter(r => !r.success);
             if (failedOps.length > 0) {
               logger.error(`[commitBatch] ${failedOps.length}/${batchResult.results.length} operations failed:`);

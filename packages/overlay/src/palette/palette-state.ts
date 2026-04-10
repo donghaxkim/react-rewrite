@@ -1,4 +1,4 @@
-import type { BatchOperation } from "@react-rewrite/shared";
+import type { BatchOperation, JSXStructuralPath } from "@react-rewrite/shared";
 
 export interface PaletteInsertEntry {
   id: string;
@@ -10,6 +10,8 @@ export interface PaletteInsertEntry {
   targetFilePath: string;
   targetLine: number;
   targetCol: number;
+  targetTagName?: string;
+  targetJSXPath?: JSXStructuralPath;
   importPath: string;
   importNames: string[];
   jsxString: string;
@@ -57,6 +59,13 @@ export function getPaletteInserts(): Map<string, PaletteInsertEntry> {
   return paletteInserts;
 }
 
+export function getPaletteInsertForElement(el: HTMLElement): PaletteInsertEntry | undefined {
+  for (const [, entry] of paletteInserts) {
+    if (entry.element === el || entry.element.contains(el)) return entry;
+  }
+  return undefined;
+}
+
 export function clearPaletteInserts(): void {
   for (const [, entry] of paletteInserts) {
     if (entry.element.parentNode) {
@@ -70,6 +79,12 @@ export function clearPaletteInserts(): void {
 export function buildPaletteOperations(): BatchOperation[] {
   const ops: BatchOperation[] = [];
   for (const [, entry] of paletteInserts) {
+    const hasResolvableTarget =
+      !!entry.targetFilePath &&
+      (entry.targetLine > 0 || (entry.targetJSXPath?.segments.length ?? 0) > 0);
+
+    if (!hasResolvableTarget) continue;
+
     ops.push({
       op: "insertComponent",
       file: entry.targetFilePath,
@@ -77,10 +92,12 @@ export function buildPaletteOperations(): BatchOperation[] {
       col: entry.targetCol,
       position: entry.position,
       componentName: entry.componentName,
+      tagName: entry.targetTagName,
       importPath: entry.importPath,
       importNames: entry.importNames,
       jsxString: entry.jsxString,
       registryName: entry.registryName,
+      jsxPath: entry.targetJSXPath,
     } as BatchOperation);
   }
   return ops;

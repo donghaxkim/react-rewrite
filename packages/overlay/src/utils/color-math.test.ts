@@ -9,7 +9,7 @@ describe("hexToHsv / hsvToHex round-trip", () => {
     { hex: "#0000ff", name: "pure blue" },
     { hex: "#ffffff", name: "pure white" },
     { hex: "#000000", name: "pure black" },
-    { hex: "#a259ff", name: "figma purple (accent)" },
+    { hex: "#3b82f6", name: "accent blue" },
     { hex: "#808080", name: "mid gray" },
     { hex: "#f76b15", name: "orange preset" },
   ];

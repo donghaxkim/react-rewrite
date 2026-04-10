@@ -9,3 +9,5 @@ package-lock.json
 .playwright-mcp/
 docs/superpowers/
 CLAUDE.md
+demo vids/
+rewrite.md

@@ -695,7 +695,7 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
   state.originalValues = new Map(values);
   state.activeOverrides = new Map();
   state.pendingBatch = new Map();
-  if (!info.filePath) {
+  if (!info.filePath && !isPaletteInsert(element)) {
     state.readOnly = true;
   }
 
@@ -736,7 +736,7 @@ export function inspect(element: HTMLElement, info: ComponentInfo): void {
 
   // Show sidebar
   sidebar.show(info.componentName, info.filePath, info.lineNumber, container);
-  if (!info.filePath) {
+  if (!info.filePath && !isPaletteInsert(element)) {
     sidebar.showWarning("Source file couldn't be resolved for this element", "Dismiss", () => sidebar.clearWarning());
   } else {
     sidebar.clearWarning();

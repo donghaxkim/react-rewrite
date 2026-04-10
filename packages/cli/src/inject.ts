@@ -68,12 +68,13 @@ export function createProxyServer(
       return;
     }
 
-    // Serve compiled component files for palette preview
-    const componentMatch = normalizedUrl.match(/^\/__react-rewrite\/components\/(.+)\.js$/);
-    if (componentMatch) {
-      const componentName = componentMatch[1];
-      const compiledPath = path.join(getCompiledDir(projectRoot), `${componentName}.js`);
-      if (fs.existsSync(compiledPath)) {
+    // Serve compiled preview modules for palette rendering
+    const moduleMatch = normalizedUrl.match(/^\/__react-rewrite\/modules\/(.+)$/);
+    if (moduleMatch) {
+      const requestedPath = moduleMatch[1];
+      const compiledRoot = getCompiledDir(projectRoot);
+      const compiledPath = path.resolve(compiledRoot, requestedPath);
+      if (compiledPath.startsWith(compiledRoot) && fs.existsSync(compiledPath)) {
         res.writeHead(200, {
           "Content-Type": "application/javascript",
           "Cache-Control": "no-cache",
@@ -83,7 +84,7 @@ export function createProxyServer(
         return;
       }
       res.writeHead(404, { "Content-Type": "text/plain" });
-      res.end(`Component ${componentName} not compiled`);
+      res.end(`Module not compiled: ${requestedPath}`);
       return;
     }
 

@@ -1,7 +1,7 @@
 // packages/overlay/src/index.ts
 import { connect, disconnect, send, onMessage, requestFileDiscovery } from "./bridge.js";
 import { mountToolbar, destroyToolbar, setOnGenerate, setOnCanvasUndo, updateGenerateButton, showToast, getShadowRoot } from "./toolbar.js";
-import { initSelection, deactivateSelection, clearSelection, setEnabled, getSelection, getSelectedElement } from "./selection.js";
+import { initSelection, deactivateSelection, clearSelection, setEnabled, getSelection, getSelectedElement, selectElement } from "./selection.js";
 import { initHighlightCanvas, destroyHighlightCanvas } from "./highlight-canvas.js";
 import { initDrag, deactivateDrag } from "./drag.js";
 import { initAnnotationLayer, destroyAnnotationLayer, clearAnnotationLayer, removeAnnotationElement } from "./annotation-layer.js";
@@ -33,7 +33,10 @@ import { COLORS, SHADOWS, RADII, TRANSITIONS, FONT_FAMILY } from "./design-token
 import { initChangelog, destroyChangelog, addChangeEntry, isChangelogOpen, setChangelogOpen, clearChangelog } from "./changelog.js";
 import { createPalettePanel } from "./palette/palette-panel.js";
 import { stageComponentInsertion } from "./palette/palette-mount.js";
-import { buildPaletteOperations, clearPaletteInserts, getPaletteInserts } from "./palette/palette-state.js";
+import { buildPaletteOperations, clearPaletteInserts, getPaletteInsertForElement, getPaletteInserts } from "./palette/palette-state.js";
+import { resolveComponentFromElement } from "./tools/resolve-helper.js";
+import { buildJSXPath } from "./utils/jsx-path.js";
+import type { JSXStructuralPath } from "@react-rewrite/shared";
 
 declare global {
   interface Window {
@@ -154,6 +157,71 @@ function installGlobalErrorHandlers(): void {
 
 let moveObserver: MutationObserver | null = null;
 
+type InsertionAnchor = {
+  element: HTMLElement;
+  filePath: string;
+  line: number;
+  col: number;
+  tagName: string;
+  jsxPath?: JSXStructuralPath;
+};
+
+function isUsableInsertionAnchor(anchor: InsertionAnchor | null): anchor is InsertionAnchor {
+  return !!anchor?.filePath && anchor.line > 0;
+}
+
+async function resolveInsertionAnchorFromElement(start: HTMLElement | null): Promise<InsertionAnchor | null> {
+  let current: HTMLElement | null = start;
+
+  while (current && current !== document.body && current !== document.documentElement) {
+    const resolved = await resolveComponentFromElement(current);
+    if (resolved?.filePath && resolved.lineNumber > 0) {
+      return {
+        element: current,
+        filePath: resolved.filePath,
+        line: resolved.lineNumber,
+        col: resolved.columnNumber ?? 0,
+        tagName: current.tagName.toLowerCase(),
+        jsxPath: buildJSXPath(current, resolved.filePath, resolved.componentName) ?? undefined,
+      };
+    }
+    current = current.parentElement;
+  }
+
+  return null;
+}
+
+function getPaletteInsertionCandidates(selectedEl: HTMLElement | null): HTMLElement[] {
+  const candidates: HTMLElement[] = [];
+
+  if (selectedEl) {
+    const paletteInsert = getPaletteInsertForElement(selectedEl);
+    candidates.push(paletteInsert?.targetElement ?? selectedEl);
+  }
+
+  const centerElement = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+  if (centerElement instanceof HTMLElement) {
+    candidates.push(centerElement);
+  }
+
+  const main = document.querySelector("main");
+  if (main instanceof HTMLElement) {
+    if (main.firstElementChild instanceof HTMLElement) candidates.push(main.firstElementChild);
+    candidates.push(main);
+  }
+
+  const root =
+    document.querySelector("#__next") ??
+    document.querySelector("#root") ??
+    document.querySelector("[data-reactroot]");
+  if (root instanceof HTMLElement) {
+    if (root.firstElementChild instanceof HTMLElement) candidates.push(root.firstElementChild);
+    candidates.push(root);
+  }
+
+  return candidates.filter((candidate, index, arr) => arr.indexOf(candidate) === index);
+}
+
 function resetOverlayState(): void {
   cancelTextEditSession();
   clearSelection();
@@ -211,49 +279,48 @@ function init(): void {
         const position = palette!.getInsertPosition();
         const selectedEl = getSelectedElement();
         const componentInfo = getSelection();
-        const targetElement = selectedEl ?? document.querySelector("main") ?? document.body;
-
-        // Resolve file path — use selection info, or discover from the target element's component
-        let filePath = componentInfo?.filePath ?? "";
-        let line = componentInfo?.lineNumber ?? 0;
-        let col = componentInfo?.columnNumber ?? 0;
-
-        if (!filePath) {
-          // Try to resolve from the target element's parent component
-          const targetComponentName = (targetElement as HTMLElement).tagName?.toLowerCase() === "main"
-            ? "Page" : (targetElement as HTMLElement).dataset?.reactRewriteComponent;
-          if (targetComponentName) {
-            const discovered = await requestFileDiscovery(targetComponentName);
-            if (discovered) filePath = discovered;
-          }
-          // If still no file path, try common page file names
-          if (!filePath) {
-            const discovered = await requestFileDiscovery("Page")
-              ?? await requestFileDiscovery("Home")
-              ?? await requestFileDiscovery("App");
-            if (discovered) filePath = discovered;
-          }
-          // Last resort: use the first stack frame from any element on the page
-          if (!filePath) {
-            const anyElement = document.querySelector("[data-reactroot]") ?? document.querySelector("#__next") ?? document.querySelector("#root");
-            if (anyElement) {
-              const fiber = (window as any).__REACT_DEVTOOLS_GLOBAL_HOOK__?.getFiberFromHostInstance?.(anyElement);
-              if (fiber?._debugSource) {
-                filePath = fiber._debugSource.fileName ?? "";
-                line = fiber._debugSource.lineNumber ?? 0;
-                col = fiber._debugSource.columnNumber ?? 0;
+        const paletteTarget = selectedEl ? getPaletteInsertForElement(selectedEl) : undefined;
+        let insertionAnchor: InsertionAnchor | null =
+          componentInfo?.filePath && componentInfo.lineNumber > 0
+            ? {
+                element: paletteTarget?.targetElement ?? selectedEl ?? document.body,
+                filePath: componentInfo.filePath,
+                line: componentInfo.lineNumber,
+                col: componentInfo.columnNumber ?? 0,
+                tagName: (paletteTarget?.targetElement ?? selectedEl ?? document.body).tagName.toLowerCase(),
+                jsxPath: componentInfo.jsxPath,
               }
-            }
+            : null;
+
+        if (!isUsableInsertionAnchor(insertionAnchor)) {
+          const candidates = getPaletteInsertionCandidates(selectedEl);
+          for (const candidate of candidates) {
+            insertionAnchor = await resolveInsertionAnchorFromElement(candidate);
+            if (isUsableInsertionAnchor(insertionAnchor)) break;
           }
         }
 
-        stageComponentInsertion(
-          { name: item.name, displayName: item.name, description: "", category: item.category, type: item.type, dependencies: [], registryDependencies: [] },
-          targetElement as HTMLElement,
+        if (!isUsableInsertionAnchor(insertionAnchor)) {
+          showToast("Select a real page element first so the component has a source location to attach to.");
+          return;
+        }
+
+        const stagedEntry = stageComponentInsertion(
+          { name: item.registryName ?? item.name.toLowerCase().replace(/\s+/g, "-"), displayName: item.name, description: "", category: item.category, type: item.type, dependencies: [], registryDependencies: [] },
+          insertionAnchor.element,
           position,
-          { filePath, line, col },
+          {
+            filePath: insertionAnchor.filePath,
+            line: insertionAnchor.line,
+            col: insertionAnchor.col,
+            tagName: insertionAnchor.tagName,
+            jsxPath: insertionAnchor.jsxPath,
+          },
           variant,
         );
+        requestAnimationFrame(() => {
+          selectElement(stagedEntry.element);
+        });
       },
     });
   }
